@@ -2,9 +2,12 @@
 
 #include <string>
 #include <system_error>
+#include <cstdint>
 
 namespace uvcomms4
 {
+
+using Descriptor = std::uint64_t;
 
 struct config
 {
