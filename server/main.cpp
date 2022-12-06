@@ -3,6 +3,7 @@
 #include "server.h"
 #include <commlib/commlib.h>
 #include <commlib/uvx.h>
+#include <commlib/pack.h>
 #include <vector>
 
 #include <cstring>

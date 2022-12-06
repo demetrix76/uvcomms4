@@ -5,6 +5,7 @@ set(SOURCES
     commlib.cpp
     uvx.h
     Streamer.h
+    pack.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

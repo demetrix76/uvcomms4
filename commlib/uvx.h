@@ -209,4 +209,8 @@ private:
     std::uint64_t   mDescriptor {0};
 };
 
-}
+
+
+
+
+} //namespace uvcomms4
