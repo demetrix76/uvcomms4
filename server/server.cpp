@@ -9,7 +9,7 @@ namespace uvcomms4
     using UVPipe = uvx::UVPipeT<Server>;
 
     Server::Server(config const &aConfig) :
-        mConfig(aConfig)
+        Streamer(aConfig)
     {
         std::promise<void> initPromise;
         auto initFuture = initPromise.get_future();
@@ -33,8 +33,7 @@ namespace uvcomms4
 
     Server::~Server()
     {
-        mStopRequested.store(true);
-        uv_async_send(&mAsyncTrigger);
+        request_stop();
         mThread.join();
     }
 
@@ -55,17 +54,11 @@ namespace uvcomms4
                 throw std::system_error(std::error_code(r, std::system_category()), "Cannot create socket directory");
 
             theLoop.init();
-            int r = uv_async_init(theLoop, &mAsyncTrigger,
-                [](uv_async_t *aAsync) {
-                    static_cast<Server*>(aAsync->data)->onAsync(aAsync);
-                }
-            );
-            mAsyncTrigger.data = this;
-            if (r < 0)
-                throw std::system_error(std::error_code(-r, std::system_category()), "Async trigger initialization failed");
-            async_initialized = true;
 
-            r = uv_pipe_init(theLoop, &mListeningPipe, 0);
+            if(int r = streamer_init(theLoop); r < 0)
+                throw std::system_error(std::error_code(-r, std::system_category()), "Streamer initialization failed");
+
+            int r = uv_pipe_init(theLoop, &mListeningPipe, 0);
             mListeningPipe.data = this;
 
             if(r < 0)
@@ -91,8 +84,9 @@ namespace uvcomms4
         {
             if(listener_initialized)
                 uvx::uv_close(mListeningPipe);
-            if(async_initialized)
-                uvx::uv_close(mAsyncTrigger);
+
+            streamer_deinit();
+
             if(theLoop.initialized())
                 // there cannot be any requests incoming yet as listen() hasn't succeeded
                 uv_run(theLoop, UV_RUN_NOWAIT);
@@ -108,7 +102,8 @@ namespace uvcomms4
         std::cout << "Server loop done, cleaning up\n";
 
         uvx::uv_close(mListeningPipe);
-        uvx::uv_close(mAsyncTrigger);
+
+        streamer_deinit();
 
         uv_walk(theLoop, [](uv_handle_t *aHandle, void*){
             if(!uv_is_closing(aHandle))
@@ -118,21 +113,12 @@ namespace uvcomms4
         // let the loop do the clean-up
         // seems there's no guarantee that the loop fill finish all its tasks in one iteration
         // as there may be unfinished requests
-        while(uv_run(theLoop, UV_RUN_NOWAIT))
+        int maxcount = 100;
+        while(uv_run(theLoop, UV_RUN_NOWAIT) && 0 < (--maxcount))
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     }
 
-    void Server::onAsync(uv_async_t *aAsync) // called on the server thread
-    {
-        if(mStopRequested.load())
-        {
-            // todo abort pending write commands
-            uv_stop(aAsync->loop);
-            return;
-        }
-        // [TODO] check for write requests etc.
-    }
 
     void Server::onConnection(uv_stream_t* aServer, int aStatus) // called on the server thread
     {
