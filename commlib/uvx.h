@@ -125,8 +125,7 @@ public:
         uv_recv_buffer_size(reinterpret_cast<uv_handle_t*>(&mPipe), &bfsize);
 #if defined(__linux__)
 // as per libUV docs, "Linux will set double the size and return double the size of the original set value."
-        // apparently, that only means that the real buffer size is twice as big as requested; no need to divide it 
-        //bfsize /= 2; 
+        // apparently, that only means that the real buffer size is twice as big as requested; no need to divide it
 #endif
 // we probably don't need buf buffers as our messages will not be huge
         bfsize = std::min(bfsize, 64 * 1024);

@@ -2,6 +2,7 @@
 
 #include <commlib/commlib.h>
 #include <commlib/uvx.h>
+#include <commlib/Streamer.h>
 #include <uv.h>
 #include <thread>
 #include <future>

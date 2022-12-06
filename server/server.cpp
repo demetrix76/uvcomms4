@@ -95,7 +95,7 @@ namespace uvcomms4
                 uvx::uv_close(mAsyncTrigger);
             if(theLoop.initialized())
                 // there cannot be any requests incoming yet as listen() hasn't succeeded
-                uv_run(theLoop, UV_RUN_NOWAIT); 
+                uv_run(theLoop, UV_RUN_NOWAIT);
 
             aInitPromise.set_exception(std::current_exception());
             return;
@@ -127,6 +127,7 @@ namespace uvcomms4
     {
         if(mStopRequested.load())
         {
+            // todo abort pending write commands
             uv_stop(aAsync->loop);
             return;
         }
@@ -177,7 +178,7 @@ namespace uvcomms4
         size_t sz = thePipe->recvBufferSize();
         if(0 == sz) sz = aSuggested_size;
         aBuf->base = static_cast<char*>(std::malloc(sz));
-        aBuf->len = aBuf->base ? sz : 0;        
+        aBuf->len = aBuf->base ? sz : 0;
     }
 
     void Server::onRead(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf)
