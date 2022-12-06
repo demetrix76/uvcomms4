@@ -1,0 +1,4 @@
+build*
+CMakePresets.json
+tmp
+.vscode
