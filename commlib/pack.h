@@ -24,7 +24,7 @@ inline constexpr std::uint32_t length_hash(std::uint32_t aLength)
 template<typename T>
 inline void u32_pack(std::uint32_t aValue, T *aDest)
 {
-    static_assert(sizeof(*aDest) = 1);
+    static_assert(sizeof(*aDest) == 1);
     aDest[0] = (aValue >> 0u ) & 0xFFu;
     aDest[1] = (aValue >> 8u ) & 0xFFu;
     aDest[2] = (aValue >> 16u) & 0xFFu;

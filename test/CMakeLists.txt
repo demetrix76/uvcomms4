@@ -1,0 +1,14 @@
+set(TARGET_NAME test)
+
+set(SOURCES
+    test1.cpp
+)
+
+enable_testing()
+
+add_executable(${TARGET_NAME} ${SOURCES})
+
+target_link_libraries(${TARGET_NAME} PRIVATE commlib GTest::gtest_main)
+
+include(GoogleTest)
+gtest_discover_tests(test)

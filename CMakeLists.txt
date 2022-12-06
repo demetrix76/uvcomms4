@@ -12,3 +12,15 @@ add_library(UV::UV ALIAS PkgConfig::UV)
 
 add_subdirectory(server)
 add_subdirectory(commlib)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest
+    GIT_TAG        release-1.12.1
+)
+
+FetchContent_MakeAvailable(googletest)
+
+add_subdirectory(test)
