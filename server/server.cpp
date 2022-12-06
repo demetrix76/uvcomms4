@@ -157,41 +157,4 @@ namespace uvcomms4
 
     }
 
-    void Server::onAlloc(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf)
-    {
-        // memory allocated must be freed in onRead
-        UVPipe* thePipe = UVPipe::fromHandle(aHandle);
-        size_t sz = thePipe->recvBufferSize();
-        if(0 == sz) sz = aSuggested_size;
-        aBuf->base = static_cast<char*>(std::malloc(sz));
-        aBuf->len = aBuf->base ? sz : 0;
-    }
-
-    void Server::onRead(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf)
-    {
-        if(aNread == UV_EOF)
-        {
-            std::cout << "EOF reached\n";
-            // we need to close the pipe but somehow prevent crashes if more write requests arrive
-            // also need to check if we have a complete message received
-        }
-        else if(aNread < 0)
-        {
-            uvx::report_uv_error(std::cerr, (int)aNread, "Error reading from a pipe");
-            // we need to close the pipe but somehow prevent crashes if more write requests arrive
-        }
-        else
-        {
-            // N.B. zero length reads are possible, avoid adding such buffers
-            std::cout << "Received " << aNread << " bytes\n";
-            std::free(aBuf->base);
-        }
-    }
-
-    void Server::onWrite(uv_write_t* aReq, int aStatus)
-    {
-
-    }
-
-
 }
