@@ -5,7 +5,8 @@
 #include <uv.h>
 #include <atomic>
 #include <cstdlib>
-#include <unordered_set>
+#include <cassert>
+#include <unordered_map>
 
 namespace uvcomms4
 {
@@ -14,11 +15,12 @@ namespace uvcomms4
  * Client and Server must be based on Streamer
 */
 
+
 template<typename impl_t>
 class Streamer
 {
 public:
-    using UVPipe = uvx::UVPipeT<impl_t>;
+    using UVPipe = UVPipeT<impl_t>;
 
     Streamer(config const & aConfig);
 
@@ -32,9 +34,13 @@ protected:
 
     void request_stop();
 
+    Descriptor next_descriptor();
+
     void onAlloc(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf);
     void onRead(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf);
     void onWrite(uv_write_t* aReq, int aStatus);
+
+    void adopt(UVPipe* aPipe);
 
 private:
     void onAsync(uv_async_t * aAsync);
@@ -42,9 +48,14 @@ private:
 
 protected:
     config              mConfig;
+private:
     uv_async_t          mAsyncTrigger {};
     bool                mAsyncInitialized { false };
     std::atomic<bool>   mStopRequested { false };
+    Descriptor          mNextDescriptor { 1 }; // always accessed on the IO thread
+
+    std::unordered_map<Descriptor, UVPipe*> mPipes;
+
 };
 
 //=================================================================================
@@ -75,6 +86,10 @@ inline void Streamer<impl_t>::streamer_deinit()
 {
     if(mAsyncInitialized)
         uv_close(reinterpret_cast<uv_handle_t*>(&mAsyncTrigger), nullptr);
+
+    for(auto [k, p] : mPipes)
+        if(!uv_is_closing(*p))
+            p->close();
 }
 
 template <typename impl_t>
@@ -82,6 +97,12 @@ inline void Streamer<impl_t>::request_stop()
 {
     mStopRequested.store(true);
     uv_async_send(&mAsyncTrigger);
+}
+
+template <typename impl_t>
+inline Descriptor Streamer<impl_t>::next_descriptor()
+{
+    return mNextDescriptor++;
 }
 
 template <typename impl_t>
@@ -119,7 +140,7 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
     }
     else if(aNread < 0)
     {
-        uvx::report_uv_error(std::cerr, (int)aNread, "Error reading from a pipe");
+        report_uv_error(std::cerr, (int)aNread, "Error reading from a pipe");
         // we need to close the pipe but somehow prevent crashes if more write requests arrive
     }
     else
@@ -136,6 +157,13 @@ inline void Streamer<impl_t>::onWrite(uv_write_t *aReq, int aStatus)
 {
 }
 
+template <typename impl_t>
+inline void Streamer<impl_t>::adopt(UVPipe *aPipe) // only on IO thread
+{
+    auto found = mPipes.find(aPipe->descriptor());
+    assert(found == mPipes.end());
+    mPipes.insert({aPipe->descriptor(), aPipe});
+}
 
 
 }

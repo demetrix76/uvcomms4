@@ -1,5 +1,6 @@
 #pragma once
 
+#include "commlib.h"
 #include <uv.h>
 #include <system_error>
 #include <iostream>
@@ -10,7 +11,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace uvx
+namespace uvcomms4
 {
 
 /** A trivial RAII wrapper around uv_loop_t.
@@ -72,13 +73,13 @@ private:
 
 
 template<typename handle_t>
-inline void uv_close(handle_t * aHandle, uv_close_cb aCloseCb = nullptr)
+inline void uv_close_x(handle_t * aHandle, uv_close_cb aCloseCb = nullptr)
 {
     ::uv_close(reinterpret_cast<uv_handle_t*>(aHandle), aCloseCb);
 }
 
 template<typename handle_t>
-inline void uv_close(handle_t & aHandle, uv_close_cb aCloseCb = nullptr)
+inline void uv_close_x(handle_t & aHandle, uv_close_cb aCloseCb = nullptr)
 {
     ::uv_close(reinterpret_cast<uv_handle_t*>(&aHandle), aCloseCb);
 }
@@ -99,8 +100,8 @@ template<typename owner_t>
 class UVPipeT
 {
 public:
-    UVPipeT(owner_t * aOwner) :
-        mOwner(aOwner)
+    UVPipeT(owner_t * aOwner, Descriptor aDescriptor):
+        mOwner(aOwner), mDescriptor(aDescriptor)
     {
         // UV docs state libuv will not write the data member
         mPipe.data = this;
@@ -136,6 +137,11 @@ public:
         return r;
     }
 
+    Descriptor descriptor() const noexcept
+    {
+        return mDescriptor;
+    }
+
     std::size_t recvBufferSize() const noexcept
     {
         return mRecvBufferSize;
@@ -163,7 +169,7 @@ public:
 
     operator uv_handle_t* () noexcept
     {
-        return reinterpret_cast<uv_handle_t*>(mPipe);
+        return reinterpret_cast<uv_handle_t*>(&mPipe);
     }
 
     template<typename handle_t>
@@ -197,9 +203,10 @@ public:
     }
 
 private:
-    uv_pipe_t mPipe {};
-    owner_t  *mOwner { nullptr };
-    int       mRecvBufferSize {0};
+    uv_pipe_t       mPipe {};
+    owner_t*        mOwner { nullptr };
+    int             mRecvBufferSize {0};
+    std::uint64_t   mDescriptor {0};
 };
 
 }

@@ -38,7 +38,7 @@ namespace uvcomms4
 
     void Server::threadFunction(std::promise<void> aInitPromise)
     {
-        uvx::UVLoop theLoop;
+        UVLoop theLoop;
         bool async_initialized = false;
         bool listener_initialized = false;
         try
@@ -81,7 +81,7 @@ namespace uvcomms4
         catch(...)
         {
             if(listener_initialized)
-                uvx::uv_close(mListeningPipe);
+                uvcomms4::uv_close_x(mListeningPipe);
 
             streamer_deinit();
 
@@ -99,13 +99,15 @@ namespace uvcomms4
         uv_run(theLoop, UV_RUN_DEFAULT);
         std::cout << "Server loop done, cleaning up\n";
 
-        uvx::uv_close(mListeningPipe);
+        uvcomms4::uv_close_x(mListeningPipe);
 
         streamer_deinit();
 
         uv_walk(theLoop, [](uv_handle_t *aHandle, void*){
-            if(!uv_is_closing(aHandle))
+            if(!uv_is_closing(aHandle)) {
                 UVPipe::fromHandle(aHandle)->close();
+                std::cerr << "WARNING: found a stray pipe!\n";
+            }
         }, nullptr);
 
         // let the loop do the clean-up
@@ -123,16 +125,16 @@ namespace uvcomms4
         std::cout << "Incoming connection\n";
         if(aStatus < 0)
         {
-            uvx::report_uv_error(std::cerr, aStatus, "WARNING: incoming connection failed");
+            report_uv_error(std::cerr, aStatus, "WARNING: incoming connection failed");
             return;
         }
 
-        UVPipe *client = new UVPipe(this);
+        UVPipe *client = new UVPipe(this, next_descriptor());
 
         if(int r = client->init(aServer->loop, 0); r < 0)
         {
             delete client;
-            uvx::report_uv_error(std::cerr, r, "WARNING: cannot initialize a pipe for incoming connection");
+            report_uv_error(std::cerr, r, "WARNING: cannot initialize a pipe for incoming connection");
             return;
         }
 
@@ -141,17 +143,19 @@ namespace uvcomms4
 
         if(int r = uv_accept(aServer, *client); r < 0)
         {
-            uvx::report_uv_error(std::cerr, r, "WARNING: cannot accept an incoming connection");
+            report_uv_error(std::cerr, r, "WARNING: cannot accept an incoming connection");
             client->close(); // will be deleted on the next loop iteration
             return;
         }
 
         if(int r = client->read_start(); r < 0)
         {
-            uvx::report_uv_error(std::cerr, r, "WARNING: cannot start reading from an incoming connection");
+            report_uv_error(std::cerr, r, "WARNING: cannot start reading from an incoming connection");
             client->close(); // will be deleted on the next loop iteration
             return;
         }
+
+        adopt(client);
 
     }
 

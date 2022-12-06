@@ -14,7 +14,7 @@ namespace uvcomms4
 class Server : public Streamer<Server>
 {
 public:
-    friend uvx::UVPipeT<Server>;
+    friend UVPipeT<Server>;
 
     Server(config const & aConfig);
     ~Server();
