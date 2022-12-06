@@ -3,6 +3,7 @@
 #include "server.h"
 #include <commlib/commlib.h>
 #include <commlib/uvx.h>
+#include <vector>
 
 #include <cstring>
 #include <sys/socket.h>
@@ -21,6 +22,13 @@ void test_connection()
     std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path));
 
     connect(fd, (sockaddr const *)&addr, SUN_LEN(&addr));
+
+    constexpr std::size_t sz = 256 * 1024;
+    std::vector<char> buffer;
+    buffer.resize(sz);
+
+    write(fd, std::data(buffer), sz);
+
 }
 
 int main(int, char*[])

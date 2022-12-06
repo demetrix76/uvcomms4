@@ -2,9 +2,11 @@
 
 #include <commlib/uvx.h>
 #include <iostream>
+#include <type_traits>
 
 namespace uvcomms4
 {
+    using UVPipe = uvx::UVPipeT<Server>;
 
     Server::Server(config const &aConfig) :
         mConfig(aConfig)
@@ -92,7 +94,8 @@ namespace uvcomms4
             if(async_initialized)
                 uvx::uv_close(mAsyncTrigger);
             if(theLoop.initialized())
-                uv_run(theLoop, UV_RUN_NOWAIT);
+                // there cannot be any requests incoming yet as listen() hasn't succeeded
+                uv_run(theLoop, UV_RUN_NOWAIT); 
 
             aInitPromise.set_exception(std::current_exception());
             return;
@@ -109,10 +112,14 @@ namespace uvcomms4
 
         uv_walk(theLoop, [](uv_handle_t *aHandle, void*){
             if(!uv_is_closing(aHandle))
-                uv_close(aHandle, nullptr); // [TODO] !!! free handle memory
+                UVPipe::fromHandle(aHandle)->close();
         }, nullptr);
 
-        uv_run(theLoop, UV_RUN_NOWAIT);
+        // let the loop do the clean-up
+        // seems there's no guarantee that the loop fill finish all its tasks in one iteration
+        // as there may be unfinished requests
+        while(uv_run(theLoop, UV_RUN_NOWAIT))
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     }
 
@@ -129,5 +136,75 @@ namespace uvcomms4
     void Server::onConnection(uv_stream_t* aServer, int aStatus) // called on the server thread
     {
         std::cout << "Incoming connection\n";
+        if(aStatus < 0)
+        {
+            uvx::report_uv_error(std::cerr, aStatus, "WARNING: incoming connection failed");
+            return;
+        }
+
+        UVPipe *client = new UVPipe(this);
+
+        if(int r = client->init(aServer->loop, 0); r < 0)
+        {
+            delete client;
+            uvx::report_uv_error(std::cerr, r, "WARNING: cannot initialize a pipe for incoming connection");
+            return;
+        }
+
+        // once initialized, we should no longer delete the UVPipe object upon failure,
+        // but rather let uv_close_cb do it
+
+        if(int r = uv_accept(aServer, *client); r < 0)
+        {
+            uvx::report_uv_error(std::cerr, r, "WARNING: cannot accept an incoming connection");
+            client->close(); // will be deleted on the next loop iteration
+            return;
+        }
+
+        if(int r = client->read_start(); r < 0)
+        {
+            uvx::report_uv_error(std::cerr, r, "WARNING: cannot start reading from an incoming connection");
+            client->close(); // will be deleted on the next loop iteration
+            return;
+        }
+
     }
+
+    void Server::onAlloc(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf)
+    {
+        // memory allocated must be freed in onRead
+        UVPipe* thePipe = UVPipe::fromHandle(aHandle);
+        size_t sz = thePipe->recvBufferSize();
+        if(0 == sz) sz = aSuggested_size;
+        aBuf->base = static_cast<char*>(std::malloc(sz));
+        aBuf->len = aBuf->base ? sz : 0;        
+    }
+
+    void Server::onRead(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf)
+    {
+        if(aNread == UV_EOF)
+        {
+            std::cout << "EOF reached\n";
+            // we need to close the pipe but somehow prevent crashes if more write requests arrive
+            // also need to check if we have a complete message received
+        }
+        else if(aNread < 0)
+        {
+            uvx::report_uv_error(std::cerr, (int)aNread, "Error reading from a pipe");
+            // we need to close the pipe but somehow prevent crashes if more write requests arrive
+        }
+        else
+        {
+            // N.B. zero length reads are possible, avoid adding such buffers
+            std::cout << "Received " << aNread << " bytes\n";
+            std::free(aBuf->base);
+        }
+    }
+
+    void Server::onWrite(uv_write_t* aReq, int aStatus)
+    {
+
+    }
+
+
 }

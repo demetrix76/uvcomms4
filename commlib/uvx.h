@@ -4,6 +4,10 @@
 #include <system_error>
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
+#include <concepts>
+#include <ostream>
+#include <algorithm>
 
 namespace uvx
 {
@@ -65,16 +69,137 @@ private:
     bool      mInitialized { false };
 };
 
+
 template<typename handle_t>
-void uv_close(handle_t * aHandle, uv_close_cb aCloseCb = nullptr)
+inline void uv_close(handle_t * aHandle, uv_close_cb aCloseCb = nullptr)
 {
     ::uv_close(reinterpret_cast<uv_handle_t*>(aHandle), aCloseCb);
 }
 
 template<typename handle_t>
-void uv_close(handle_t & aHandle, uv_close_cb aCloseCb = nullptr)
+inline void uv_close(handle_t & aHandle, uv_close_cb aCloseCb = nullptr)
 {
     ::uv_close(reinterpret_cast<uv_handle_t*>(&aHandle), aCloseCb);
 }
+
+/// aError is expected to be negative as per libuv convention
+inline std::ostream & report_uv_error(std::ostream & aStream, int aError, std::string_view aMessage)
+{
+    return aStream << aMessage << ": "
+        << std::error_code(-aError, std::system_category()).message()
+        << std::endl;
+}
+
+/** Wrapper for dynamically allocated pipe handles.
+uv_pipe_t::data points to this object;
+this object points to the owner (Server/Client)
+*/
+template<typename owner_t>
+class UVPipeT
+{
+public:
+    UVPipeT(owner_t * aOwner) :
+        mOwner(aOwner)
+    {
+        // UV docs state libuv will not write the data member
+        mPipe.data = this;
+    }
+
+    int init(uv_loop_t *aLoop, int aIpc)
+    {
+        int r = uv_pipe_init(aLoop, *this, aIpc);
+        mPipe.data = this;
+        return r;
+    }
+
+    void close()
+    {
+        uv_close(*this, &close_cb);
+    }
+
+    int read_start()
+    {
+        int r = uv_read_start(*this, &alloc_cb, &read_cb);
+#if defined(__APPLE__) || defined(__unix__)
+        int bfsize = 0;
+        uv_recv_buffer_size(reinterpret_cast<uv_handle_t*>(&mPipe), &bfsize);
+#if defined(__linux__)
+// as per libUV docs, "Linux will set double the size and return double the size of the original set value."
+        // apparently, that only means that the real buffer size is twice as big as requested; no need to divide it 
+        //bfsize /= 2; 
+#endif
+// we probably don't need buf buffers as our messages will not be huge
+        bfsize = std::min(bfsize, 64 * 1024);
+        mRecvBufferSize = bfsize;
+        std::cout << "Receive buffer size " << mRecvBufferSize << std::endl;
+#endif
+        return r;
+    }
+
+    std::size_t recvBufferSize() const noexcept
+    {
+        return mRecvBufferSize;
+    }
+
+    owner_t *owner() noexcept
+    {
+        return mOwner;
+    }
+
+    uv_pipe_t* get() noexcept
+    {
+        return &mPipe;
+    }
+
+    operator uv_pipe_t* () noexcept
+    {
+        return &mPipe;
+    }
+
+    operator uv_stream_t* () noexcept
+    {
+        return reinterpret_cast<uv_stream_t*>(&mPipe);
+    }
+
+    operator uv_handle_t* () noexcept
+    {
+        return reinterpret_cast<uv_handle_t*>(mPipe);
+    }
+
+    template<typename handle_t>
+        requires requires (handle_t * h) {
+            {h->data} -> std::convertible_to<void*>;
+        }
+    static UVPipeT* fromHandle(handle_t *aHandle)
+    {
+        return static_cast<UVPipeT*>(aHandle->data);
+    }
+
+    static void close_cb(uv_handle_t * aHandle)
+    {
+        static_assert(std::is_same_v<decltype(&UVPipeT<owner_t>::close_cb), ::uv_close_cb>);
+        delete fromHandle(aHandle);
+    }
+
+    static void alloc_cb(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf)
+    {
+        UVPipeT::fromHandle(aHandle)->owner()->onAlloc(aHandle, aSuggested_size, aBuf);
+    }
+
+    static void read_cb(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf)
+    {
+        UVPipeT::fromHandle(aStream)->owner()->onRead(aStream, aNread, aBuf);
+    }
+
+    static void write_cb(uv_write_t* aReq, int aStatus)
+    {
+        UVPipeT::fromHandle(aReq->handle)->owner()->onWrite(aReq, aStatus);
+    }
+
+private:
+    uv_pipe_t mPipe {};
+    owner_t  *mOwner { nullptr };
+    int       mRecvBufferSize {0};
+};
 
 }
