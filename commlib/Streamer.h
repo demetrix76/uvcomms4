@@ -5,6 +5,7 @@
 #include <uv.h>
 #include <atomic>
 #include <cstdlib>
+#include <unordered_set>
 
 namespace uvcomms4
 {
@@ -17,6 +18,8 @@ template<typename impl_t>
 class Streamer
 {
 public:
+    using UVPipe = uvx::UVPipeT<impl_t>;
+
     Streamer(config const & aConfig);
 
 protected:
@@ -97,7 +100,6 @@ template <typename impl_t>
 inline void Streamer<impl_t>::onAlloc(uv_handle_t *aHandle, size_t aSuggested_size, uv_buf_t *aBuf)
 {
     // memory allocated must be freed in onRead
-    using UVPipe = uvx::UVPipeT<Streamer<impl_t>>;
     UVPipe* thePipe = UVPipe::fromHandle(aHandle);
     size_t sz = thePipe->recvBufferSize();
     if(0 == sz) sz = aSuggested_size;

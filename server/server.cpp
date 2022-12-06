@@ -6,8 +6,6 @@
 
 namespace uvcomms4
 {
-    using UVPipe = uvx::UVPipeT<Server>;
-
     Server::Server(config const &aConfig) :
         Streamer(aConfig)
     {

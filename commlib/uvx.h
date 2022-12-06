@@ -8,6 +8,7 @@
 #include <concepts>
 #include <ostream>
 #include <algorithm>
+#include <cstdint>
 
 namespace uvx
 {
