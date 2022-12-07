@@ -11,6 +11,7 @@ pkg_check_modules(UV REQUIRED IMPORTED_TARGET libuv>=1.44)
 add_library(UV::UV ALIAS PkgConfig::UV)
 
 add_subdirectory(server)
+add_subdirectory(client)
 add_subdirectory(commlib)
 
 include(FetchContent)
