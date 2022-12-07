@@ -13,12 +13,12 @@ namespace uvcomms4
 
 inline constexpr std::uint32_t length_hash(std::uint32_t aLength)
 {
-    auto a = aLength * aLength;
-    a ^= (a << 13);
-    a ^= (a >> 17);
-    a ^= (a << 5);
-    a ^= 0xAAAAAAAAu;
-    return a % 1073741419u;
+    auto a = ((static_cast<std::uint64_t>(aLength) << 32u) | aLength);
+    a ^= (a << 13u);
+    a ^= (a >> 17u);
+    a ^= (a << 5u);
+    a ^= 0xABCDABCDABCDABCDul;
+    return a % 2147483629u;
 }
 
 template<typename T>
