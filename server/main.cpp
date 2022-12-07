@@ -23,7 +23,8 @@ void test_connection()
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path));
 
-    connect(fd, (sockaddr const *)&addr, SUN_LEN(&addr));
+    // connect(fd, (sockaddr const *)&addr, SUN_LEN(&addr)); // SUN_LEN triggers UB sanitizer
+    connect(fd, (sockaddr const *)&addr, sizeof(sockaddr_un));
 
     constexpr std::size_t sz = 256 * 1024;
     std::vector<char> buffer;
@@ -42,9 +43,6 @@ int main(int, char*[])
 {
     using namespace std::literals;
     std::cout << "Hi there\n";
-    for(int i = 0; i < 1000; i++)
-        std::cout << uvcomms4::length_hash(i) << std::endl;
-
     try
     {
         uvcomms4::Server server(uvcomms4::config::get_default());
