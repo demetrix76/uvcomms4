@@ -2,14 +2,13 @@
 
 #include <uv.h>
 #include "pack.h"
+#include "commlib.h"
 #include <utility>
 #include <future>
 #include <memory>
 #include <concepts>
 #include <type_traits>
-#include <vector>
-#include <list>
-#include <array>
+
 
 namespace uvcomms4::detail
 {
@@ -158,30 +157,5 @@ inline std::unique_ptr<T> nonarray_unique_ptr(T* ptr)
     return std::unique_ptr<T>(ptr);
 }
 
-inline void aaa()
-{
-    using namespace std::literals;
-
-    auto x = new WriteRequest(1, "ABCDEF"s);
-
-    std::vector<char> buf;
-    WriteRequest rq(1, std::move(buf));
-
-    WriteRequest rq2(1, std::vector<std::uint8_t>{}, [](int){});
-
-    auto nrq = new WriteRequest(1, buf);
-
-    uv_write_t wt;
-
-    struct A{};
-
-    constexpr bool b1 = MessageableContainer<std::vector<char>>;
-    constexpr bool b2 = MessageableContainer<std::vector<unsigned char>>;
-    constexpr bool b3 = MessageableContainer<std::vector<int>>;
-    constexpr bool b4 = MessageableContainer<std::list<char>>;
-    constexpr bool b5 = MessageableContainer<std::array<std::uint8_t, 99>>;
-    constexpr bool b6 = MessageableContainer<decltype("ABC")>;
-    constexpr bool b7 = MessageableContainer<const char[4]>;
-}
 
 }
