@@ -5,6 +5,7 @@
 #include <commlib/uvx.h>
 #include <commlib/pack.h>
 #include <vector>
+#include <memory>
 
 #include <cstring>
 #include <sys/socket.h>
@@ -30,17 +31,35 @@ void test_connection()
 
     write(fd, std::data(buffer), sz);
 
+    char read_buffer[16];
+    read(fd, read_buffer, 16);
+
+    int q= 0;
+
 }
 
 int main(int, char*[])
 {
+    using namespace std::literals;
     std::cout << "Hi there\n";
+    for(int i = 0; i < 1000; i++)
+        std::cout << uvcomms4::length_hash(i) << std::endl;
 
     try
     {
         uvcomms4::Server server(uvcomms4::config::get_default());
-        test_connection();
+        auto testc_res = std::async(std::launch::async, test_connection);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        //auto f1 = server.send(1, "ABCDEFGH"s);
+        server.send(1, "ABCDEFGH"s, [](int r){
+            std::cout << "Lambda send result " << r << std::endl;
+        });
+
         std::this_thread::sleep_for(std::chrono::seconds(1));
+        //std::cout << "Send result: " << f1.get() << std::endl;
+        testc_res.get();
     }
     catch(std::exception &e)
     {

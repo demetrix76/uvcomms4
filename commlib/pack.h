@@ -7,7 +7,7 @@ namespace uvcomms4
 
 /* The idea is to prefix every message with a header:
     4 bytes length (limited to 32bit), little-endian
-    4 bytes length hash to make (almost) sure we didn't go out of sync
+    4 bytes length hash to make (almost) sure we didn't go out of sync (consider this poor man's digital signature)
     if the hash does not match, then we should probably interrupt this connection as it is no longer healthy
 */
 
@@ -17,8 +17,8 @@ inline constexpr std::uint32_t length_hash(std::uint32_t aLength)
     a ^= (a << 13);
     a ^= (a >> 17);
     a ^= (a << 5);
-    a ^= 0xAAAAAAAA;
-    return a % 2147483647u;
+    a ^= 0xAAAAAAAAu;
+    return a % 1073741419u;
 }
 
 template<typename T>

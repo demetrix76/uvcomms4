@@ -6,6 +6,7 @@ set(SOURCES
     uvx.h
     Streamer.h
     pack.h
+    uvwrite.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

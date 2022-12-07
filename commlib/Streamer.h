@@ -2,11 +2,16 @@
 
 #include "commlib.h"
 #include "uvx.h"
+#include "uvwrite.h"
 #include <uv.h>
 #include <atomic>
 #include <cstdlib>
 #include <cassert>
 #include <unordered_map>
+#include <vector>
+#include <mutex>
+#include <stdexcept>
+#include <limits>
 
 namespace uvcomms4
 {
@@ -24,6 +29,14 @@ public:
 
     Streamer(config const & aConfig);
 
+    template<MessageableContainer message_t>
+    std::future<int> send(Descriptor aPipeDescriptor, message_t && aMessage);
+
+
+    template<MessageableContainer message_t, MessageSendCallback callback_t>
+    void send(Descriptor aPipeDescriptor, message_t && aMessage, callback_t && aCallback);
+
+
 protected:
     // called on the I/O thread
     int streamer_init(uv_loop_t * aLoop);
@@ -40,10 +53,13 @@ protected:
     void onRead(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf);
     void onWrite(uv_write_t* aReq, int aStatus);
 
+    // take control of the pipe
     void adopt(UVPipe* aPipe);
 
 private:
     void onAsync(uv_async_t * aAsync);
+
+    void pendingWritesProcess();
 
 
 protected:
@@ -54,7 +70,12 @@ private:
     std::atomic<bool>   mStopRequested { false };
     Descriptor          mNextDescriptor { 1 }; // always accessed on the IO thread
 
-    std::unordered_map<Descriptor, UVPipe*> mPipes;
+    std::unordered_map<Descriptor, UVPipe*> mPipes; // always accessed on the IO thread
+
+    std::mutex          mMx;
+    std::vector<detail::IWriteRequest::pointer_t>   mWriteQueue;
+    std::vector<detail::IWriteRequest::pointer_t>   mWriteQueueTemporary; // for quick swap, only accessed on the IO thread
+
 
 };
 
@@ -110,9 +131,13 @@ inline void Streamer<impl_t>::onAsync(uv_async_t *aAsync)
 {
     if(mStopRequested.load())
     {
+        // todo pendingWritesAbort();
         uv_stop(aAsync->loop);
     }
-    // todo check for write commands
+
+    pendingWritesProcess();
+
+
     // todo do we need to also call the descendant?
 }
 
@@ -153,16 +178,101 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
 
 
 template <typename impl_t>
-inline void Streamer<impl_t>::onWrite(uv_write_t *aReq, int aStatus)
-{
-}
-
-template <typename impl_t>
 inline void Streamer<impl_t>::adopt(UVPipe *aPipe) // only on IO thread
 {
     auto found = mPipes.find(aPipe->descriptor());
     assert(found == mPipes.end());
     mPipes.insert({aPipe->descriptor(), aPipe});
+}
+
+
+template <typename impl_t>
+template <MessageableContainer message_t>
+inline std::future<int> Streamer<impl_t>::send(Descriptor aPipeDescriptor, message_t &&aMessage)
+{
+    if(std::size(aMessage) > std::numeric_limits<std::uint32_t>::max())
+        throw std::runtime_error("IPC message length exceeds the limit");
+
+    auto write_req = detail::nonarray_unique_ptr(new detail::WriteRequest(aPipeDescriptor, std::forward<message_t>(aMessage)));
+    auto ret_future = write_req->get_future();
+    {
+        std::lock_guard lk(mMx);
+        mWriteQueue.emplace_back(std::move(write_req));
+    }
+    uv_async_send(&mAsyncTrigger);
+
+    return ret_future;
+}
+
+
+template <typename impl_t>
+template <MessageableContainer message_t, MessageSendCallback callback_t>
+inline void Streamer<impl_t>::send(Descriptor aPipeDescriptor, message_t &&aMessage, callback_t &&aCallback)
+{
+    auto write_req = detail::nonarray_unique_ptr(new detail::WriteRequest(
+        aPipeDescriptor, std::forward<message_t>(aMessage),
+        std::forward<callback_t>(aCallback)
+    ));
+    {
+        std::lock_guard lk(mMx);
+        mWriteQueue.emplace_back(std::move(write_req));
+    }
+    uv_async_send(&mAsyncTrigger);
+}
+
+
+template <typename impl_t>
+inline void Streamer<impl_t>::pendingWritesProcess() // called on the IO thread
+{
+    mWriteQueueTemporary.clear();
+    {
+        std::lock_guard lk(mMx);
+        mWriteQueueTemporary.swap(mWriteQueue);
+    }
+
+    for(std::unique_ptr<detail::IWriteRequest> & req: mWriteQueueTemporary)
+    {
+        auto found_pipe = mPipes.find(req->pipeDescriptor);
+        if(found_pipe == mPipes.end())
+        {
+            req->complete(UV_ENOTCONN);
+            req.reset();
+        }
+        else
+        {
+            UVPipe *thePipe = found_pipe->second;
+
+            uv_buf_t bufs[] = {
+                uv_buf_init(req->header, sizeof(req->header)),
+                // because we're dealing with C...
+                uv_buf_init(const_cast<char*>(req->data()), static_cast<unsigned>(req->size()))
+            };
+
+            int r = uv_write(&req->uv_write_request, *thePipe, bufs, std::size(bufs), &UVPipe::write_cb);
+
+            if(r < 0)
+            {
+                // failed immediately, report back and destroy the request
+                req->complete(r);
+                req.reset();
+            }
+            else
+            {
+                // relinquish control to libuv, WriteRequest will report back and free the request in onWrite
+                req.release();
+            }
+        }
+    }
+
+    mWriteQueueTemporary.clear();
+
+}
+
+template <typename impl_t>
+inline void Streamer<impl_t>::onWrite(uv_write_t *aReq, int aStatus)
+{
+    std::unique_ptr<detail::IWriteRequest> iwrq { static_cast<detail::IWriteRequest*>(aReq->data) };
+    iwrq->complete(aStatus);
 }
 
 

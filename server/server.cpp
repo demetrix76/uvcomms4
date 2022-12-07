@@ -39,7 +39,6 @@ namespace uvcomms4
     void Server::threadFunction(std::promise<void> aInitPromise)
     {
         UVLoop theLoop;
-        bool async_initialized = false;
         bool listener_initialized = false;
         try
         {
