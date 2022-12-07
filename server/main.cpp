@@ -46,18 +46,21 @@ int main(int, char*[])
     try
     {
         uvcomms4::Server server(uvcomms4::config::get_default());
-        auto testc_res = std::async(std::launch::async, test_connection);
+        //auto testc_res = std::async(std::launch::async, test_connection);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
         //auto f1 = server.send(1, "ABCDEFGH"s);
-        server.send(1, "ABCDEFGH"s, [](int r){
-            std::cout << "Lambda send result " << r << std::endl;
-        });
+        // server.send(1, "ABCDEFGH"s, [](int r){
+        //     std::cout << "Lambda send result " << r << std::endl;
+        // });
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        //std::this_thread::sleep_for(std::chrono::seconds(1));
         //std::cout << "Send result: " << f1.get() << std::endl;
-        testc_res.get();
+        //testc_res.get();
+        std::cout << "Hit Enter to stop...\n";
+        std::string s;
+        std::getline(std::cin, s, '\n');
     }
     catch(std::exception &e)
     {

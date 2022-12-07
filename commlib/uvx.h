@@ -127,7 +127,7 @@ public:
         uv_recv_buffer_size(reinterpret_cast<uv_handle_t*>(&mPipe), &bfsize);
 #if defined(__linux__)
 // as per libUV docs, "Linux will set double the size and return double the size of the original set value."
-        // apparently, that only means that the real buffer size is twice as big as requested; no need to divide it
+// apparently, this only means that the real buffer size is twice as big as requested; no need to divide it here
 #endif
 // we probably don't need buf buffers as our messages will not be huge
         bfsize = std::min(bfsize, 64 * 1024);
@@ -200,6 +200,11 @@ public:
     static void write_cb(uv_write_t* aReq, int aStatus)
     {
         UVPipeT::fromHandle(aReq->handle)->owner()->onWrite(aReq, aStatus);
+    }
+
+    static void connect_cb(uv_connect_t* aReq, int aStatus)
+    {
+        UVPipeT::fromHandle(aReq->handle)->owner()->onConnect(aReq, aStatus);
     }
 
 private:

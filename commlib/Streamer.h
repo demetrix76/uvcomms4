@@ -47,6 +47,8 @@ protected:
 
     void request_stop();
 
+    void trigger_async();
+
     Descriptor next_descriptor();
 
     void onAlloc(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf);
@@ -57,7 +59,7 @@ protected:
     void adopt(UVPipe* aPipe);
 
 private:
-    void onAsync(uv_async_t * aAsync);
+    void onAsyncBase(uv_async_t * aAsync);
 
     void pendingWritesProcess();
 
@@ -93,7 +95,7 @@ inline int Streamer<impl_t>::streamer_init(uv_loop_t *aLoop)
 {
     int r = uv_async_init(aLoop, &mAsyncTrigger,
         [](uv_async_t *aAsync){
-            static_cast<Streamer<impl_t>*>(aAsync->data)->onAsync(aAsync);
+            static_cast<Streamer<impl_t>*>(aAsync->data)->onAsyncBase(aAsync);
         });
     mAsyncTrigger.data = this;
     if(r < 0)
@@ -121,25 +123,34 @@ inline void Streamer<impl_t>::request_stop()
 }
 
 template <typename impl_t>
+inline void Streamer<impl_t>::trigger_async()
+{
+    uv_async_send(&mAsyncTrigger);
+}
+
+template <typename impl_t>
 inline Descriptor Streamer<impl_t>::next_descriptor()
 {
     return mNextDescriptor++;
 }
 
 template <typename impl_t>
-inline void Streamer<impl_t>::onAsync(uv_async_t *aAsync)
+inline void Streamer<impl_t>::onAsyncBase(uv_async_t *aAsync)
 {
     if(mStopRequested.load())
     {
         // todo pendingWritesAbort();
         uv_stop(aAsync->loop);
+        return;
     }
 
     pendingWritesProcess();
 
+    // call descendant's onAsync if it provides one
+    if constexpr(requires (impl_t* impl, uv_async_t *a) { impl->onAsync(a); })
+        static_cast<impl_t*>(this)->onAsync(aAsync);
 
-    // todo do we need to also call the descendant?
-}
+ }
 
 
 template <typename impl_t>
@@ -172,8 +183,8 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
     {
         // N.B. zero length reads are possible, avoid adding such buffers
         std::cout << "Received " << aNread << " bytes\n";
-        std::free(aBuf->base);
     }
+    std::free(aBuf->base);
 }
 
 
