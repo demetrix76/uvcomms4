@@ -7,6 +7,7 @@ set(SOURCES
     Streamer.h
     pack.h
     uvwrite.h
+    collector.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

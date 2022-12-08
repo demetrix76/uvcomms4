@@ -34,9 +34,6 @@ void test_connection()
 
     char read_buffer[16];
     read(fd, read_buffer, 16);
-
-    int q= 0;
-
 }
 
 int main(int, char*[])

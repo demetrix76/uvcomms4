@@ -3,6 +3,7 @@
 #include "commlib.h"
 #include "uvx.h"
 #include "uvwrite.h"
+#include "collector.h"
 #include <uv.h>
 #include <atomic>
 #include <cstdlib>
@@ -160,7 +161,7 @@ inline void Streamer<impl_t>::onAlloc(uv_handle_t *aHandle, size_t aSuggested_si
     UVPipe* thePipe = UVPipe::fromHandle(aHandle);
     size_t sz = thePipe->recvBufferSize();
     if(0 == sz) sz = aSuggested_size;
-    aBuf->base = static_cast<char*>(std::malloc(sz));
+    aBuf->base = ReadBuffer::memalloc(sz);
     aBuf->len = aBuf->base ? sz : 0;
 }
 

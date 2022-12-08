@@ -2,6 +2,7 @@ set(TARGET_NAME test)
 
 set(SOURCES
     test1.cpp
+    messagemock.h
 )
 
 enable_testing()
