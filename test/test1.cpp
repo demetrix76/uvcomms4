@@ -30,7 +30,7 @@ TEST(MessageFormat, PackUnpack)
 TEST(MessageFormat, Collector1)
 {
     using namespace std::literals;
-    uvcomms4::Collector<std::string_view> collector;
+    uvcomms4::CollectorT<std::string_view> collector;
     collector.append("ABCD"sv);
     collector.append("EFGH"sv);
     EXPECT_TRUE(collector.contains(8));
@@ -68,7 +68,7 @@ TEST(MessageFormat, Collector_Incomplete_length)
     mm::appendMessage(stream, "Message1");
     stream.resize(7);
 
-    uvcomms4::Collector<mm::stream_t> collector;
+    uvcomms4::CollectorT<mm::stream_t> collector;
     collector.append(std::move(stream));
     EXPECT_EQ(collector.messageLength(true), uvcomms4::MORE_DATA);
     EXPECT_TRUE(collector.contains(7));
@@ -81,7 +81,7 @@ TEST(MessageFormat, Collector_Corrupt)
     mm::stream_t stream;
     mm::appendMessage(stream, "Message1");
     stream[7] = '\xFF';
-    uvcomms4::Collector<mm::stream_t> collector;
+    uvcomms4::CollectorT<mm::stream_t> collector;
     collector.append(std::move(stream));
     EXPECT_EQ(collector.status(), uvcomms4::CollectorStatus::Corrupt);
     EXPECT_TRUE(collector.contains(8));
@@ -93,7 +93,7 @@ TEST(MessageFormat, Collector_MessageLength)
     mm::stream_t stream;
     mm::appendMessage(stream, "Message1234");
 
-    uvcomms4::Collector<mm::stream_t> collector;
+    uvcomms4::CollectorT<mm::stream_t> collector;
     collector.append(std::move(stream));
     EXPECT_EQ(collector.messageLength(true), 11);
     EXPECT_TRUE(collector.contains(11));
@@ -107,7 +107,7 @@ TEST(MessageFormat, Collector_ExtractMessage)
     std::string msg1 = "Message1234";
     mm::appendMessage(stream, msg1);
 
-    uvcomms4::Collector<mm::stream_t> collector;
+    uvcomms4::CollectorT<mm::stream_t> collector;
     collector.append(std::move(stream));
 
     EXPECT_EQ(collector.status(), u::CollectorStatus::HasMessage);
@@ -141,7 +141,7 @@ TEST(MessageFormat, Collector_ExtractMessage2)
     mm::appendMessage(stream, msg3);
     mm::appendMessage(stream, msg4);
 
-    uvcomms4::Collector<mm::stream_t> collector;
+    uvcomms4::CollectorT<mm::stream_t> collector;
     collector.append(std::move(stream));
 
     EXPECT_EQ(collector.status(), u::CollectorStatus::HasMessage);
@@ -177,7 +177,7 @@ TEST(MessageFormat, Collector_ExtractMessage_Split)
     // buffer 1: [12-22), buffer boundary in message header
     // buffer 2: [22-65), more than one message in buffer
 
-    uvcomms4::Collector<std::string_view> collector;
+    uvcomms4::CollectorT<std::string_view> collector;
     collector.append(std::string_view(&stream[0], 12));
     collector.append(std::string_view(&stream[12], 10));
     collector.append(std::string_view(&stream[22], 43));
@@ -207,7 +207,7 @@ TEST(MessageFormat, Collector_GetMessage)
     mm::appendMessage(stream, msg3);
     mm::appendMessage(stream, msg4);
 
-    uvcomms4::Collector<mm::stream_t> collector;
+    uvcomms4::CollectorT<mm::stream_t> collector;
     collector.append(std::move(stream));
 
     EXPECT_EQ(collector.status(), u::CollectorStatus::HasMessage);

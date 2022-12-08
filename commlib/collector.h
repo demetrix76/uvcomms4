@@ -1,5 +1,6 @@
 #pragma once
 
+#include "pack.h"
 #include <cstdlib>
 #include <list>
 #include <type_traits>
@@ -89,7 +90,7 @@ namespace uvcomms4
     Messages (and even message headers) may span across buffer boundaries.
     */
     template<CollectibleBuffer buffer_t>
-    class Collector
+    class CollectorT
     {
     public:
         static constexpr std::size_t header_size = 8;
@@ -149,16 +150,19 @@ namespace uvcomms4
         std::size_t           mPos { 0 };
     };
 
+    /// The Default Collector type used by Streamer
+    using Collector = CollectorT<ReadBuffer>;
+
 
     template <CollectibleBuffer buffer_t>
-    void Collector<buffer_t>::append(buffer_t &&aBuffer)
+    void CollectorT<buffer_t>::append(buffer_t &&aBuffer)
     {
         mBuffers.emplace_back(std::forward<buffer_t>(aBuffer));
     }
 
 
     template <CollectibleBuffer buffer_t>
-    inline bool Collector<buffer_t>::contains(std::size_t aSize) const
+    inline bool CollectorT<buffer_t>::contains(std::size_t aSize) const
     {
         auto pBuf = mBuffers.begin();
         auto pos = mPos;
@@ -183,7 +187,7 @@ namespace uvcomms4
 
 
     template <CollectibleBuffer buffer_t>
-    inline std::ptrdiff_t Collector<buffer_t>::messageLength(bool aAdvance)
+    inline std::ptrdiff_t CollectorT<buffer_t>::messageLength(bool aAdvance)
     {
         char buffer[header_size];
         if(!copyTo(buffer, header_size, aAdvance)) // if there's not enough data, aAdvance will have no effect
@@ -200,7 +204,7 @@ namespace uvcomms4
 
 
     template <CollectibleBuffer buffer_t>
-    inline CollectorStatus Collector<buffer_t>::status()
+    inline CollectorStatus CollectorT<buffer_t>::status()
     {
         auto msglen = messageLength(false);
         switch(msglen)
@@ -217,7 +221,7 @@ namespace uvcomms4
 
     template <CollectibleBuffer buffer_t>
     template <typename dest_t>
-    inline CollectorStatus Collector<buffer_t>::extractMessageTo(dest_t &&aDest)
+    inline CollectorStatus CollectorT<buffer_t>::extractMessageTo(dest_t &&aDest)
     {
         if(auto st = status(); st != CollectorStatus::HasMessage)
             return st;
@@ -232,7 +236,7 @@ namespace uvcomms4
 
     template <CollectibleBuffer buffer_t>
     template <typename container_t>
-    inline std::tuple<CollectorStatus, container_t> Collector<buffer_t>::getMessage()
+    inline std::tuple<CollectorStatus, container_t> CollectorT<buffer_t>::getMessage()
     {
         if(CollectorStatus st = status(); st == CollectorStatus::HasMessage)
         {
@@ -247,7 +251,7 @@ namespace uvcomms4
 
     template <CollectibleBuffer buffer_t>
     template <std::output_iterator<char> iter_t>
-    inline bool Collector<buffer_t>::copyTo(iter_t aDest, std::size_t aCount, bool aAdvance)
+    inline bool CollectorT<buffer_t>::copyTo(iter_t aDest, std::size_t aCount, bool aAdvance)
     {
         auto pBuf = mBuffers.begin();
         auto pos = mPos;
@@ -282,7 +286,7 @@ namespace uvcomms4
     template <CollectibleBuffer buffer_t>
     template <typename container_t>
         requires requires(container_t cont, char c) { { cont.push_back(c) };  }
-    inline bool Collector<buffer_t>::copyTo(container_t &aContainer, std::size_t aCount, bool aAdvance)
+    inline bool CollectorT<buffer_t>::copyTo(container_t &aContainer, std::size_t aCount, bool aAdvance)
     {
         if constexpr(requires (container_t cont, std::size_t sz) {
             { cont.size() } -> std::convertible_to<std::size_t>;
