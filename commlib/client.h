@@ -19,7 +19,7 @@ public:
     friend UVPipeT<Client>;
     friend Streamer<Client>;
 
-    Client(config const & aConfig);
+    Client(config const & aConfig, ClientDelegate::pointer aDelegate);
     ~Client();
 
     virtual void Connected(Descriptor aDescriptor);

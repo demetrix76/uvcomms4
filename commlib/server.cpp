@@ -5,8 +5,8 @@
 
 namespace uvcomms4
 {
-    Server::Server(config const &aConfig) :
-        Streamer(aConfig)
+    Server::Server(config const &aConfig, ServerDelegate::pointer aDelegate) :
+        Streamer(aConfig, aDelegate)
     {
         std::promise<void> initPromise;
         auto initFuture = initPromise.get_future();
@@ -26,6 +26,20 @@ namespace uvcomms4
             mThread.join();
             throw;
         }
+
+        try
+        {
+            aDelegate->onStartup(this);
+        }
+        catch(...)
+        {
+            request_stop();
+            unlockIO();
+            mThread.join();
+            throw;
+        }
+
+        unlockIO();
     }
 
     Server::~Server()
@@ -41,7 +55,7 @@ namespace uvcomms4
         bool listener_initialized = false;
         try
         {
-            // [TODO] acquire file lock first
+            // [TODO] acquire file lock first...or do it on a higher level?
 
             if(int r = delete_socket_file(mConfig); r != 0)
                 throw std::system_error(std::error_code(r, std::system_category()), "Cannot delete socket file");
@@ -92,6 +106,8 @@ namespace uvcomms4
         }
 
         aInitPromise.set_value();
+
+        mLoopSemaphore.acquire();
 
         std::cout << "Server loop running...\n";
         uv_run(theLoop, UV_RUN_DEFAULT);

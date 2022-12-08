@@ -12,6 +12,7 @@ set(SOURCES
     server.cpp
     client.h
     client.cpp
+    delegate.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

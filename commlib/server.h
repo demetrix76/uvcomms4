@@ -11,12 +11,12 @@
 namespace uvcomms4
 {
 
-class Server : public Streamer<Server>
+class Server final : public Streamer<Server>
 {
 public:
     friend UVPipeT<Server>;
 
-    Server(config const & aConfig);
+    Server(config const & aConfig, ServerDelegate::pointer aDelegate);
     ~Server();
 
 private:

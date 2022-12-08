@@ -4,6 +4,7 @@
 #include "uvx.h"
 #include "uvwrite.h"
 #include "collector.h"
+#include "delegate.h"
 #include <uv.h>
 #include <atomic>
 #include <cstdlib>
@@ -13,6 +14,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <limits>
+#include <semaphore>
 
 namespace uvcomms4
 {
@@ -28,7 +30,7 @@ class Streamer
 public:
     using UVPipe = UVPipeT<impl_t>;
 
-    Streamer(config const & aConfig);
+    Streamer(config const & aConfig, Delegate::pointer aDelegate);
 
     /** Send the message and get the result as an std::future<>.
      *  Returns 0 un success, UV error code on failure (negative value).
@@ -44,29 +46,8 @@ public:
     template<MessageableContainer message_t, MessageSendCallback callback_t>
     void send(Descriptor aPipeDescriptor, message_t && aMessage, callback_t && aCallback);
 
-    /** Called when a new complete incoming message becomes available.
-     *  Called on the IO thread and the supplied Collector must only be accessed from the IO thread;
-     *  Extract the message before moving to another thread.
-    */
-    virtual void onMessage(Descriptor aDescriptor, Collector & aCollector) {
-        // if we don't extract the message, we'll get an infitite loop
-        auto [status, message] = aCollector.getMessage<std::string>();
-        if(status == CollectorStatus::HasMessage)
-            std::cout << "MESSAGE: " << message << std::endl;
-    } // todo make pure virtual
-
-    /// called when a new pipe was connected; IO thread
-    virtual void onNewPipe(Descriptor aDescriptor)
-    {
-        std::cout << "New pipe with descriptor " << aDescriptor << std::endl;
-    }
-
-    /// IO thread
-    virtual void onPipeClosed(Descriptor aDescriptor, int aErrorCode)
-    {
-        std::cout << "Pipe closed; descriptor " << aDescriptor << ", error code " << aErrorCode << std::endl;
-    }
-
+    // may be called from the Delegate to unleash the IO loop earlier
+    void unlockIO();
 
 protected:
     // called on the I/O thread
@@ -98,7 +79,10 @@ private:
 
 
 protected:
-    config              mConfig;
+    config                  mConfig;
+    Delegate::pointer       mDelegate;
+    std::binary_semaphore   mLoopSemaphore { 0 };
+
 private:
     uv_async_t          mAsyncTrigger {};
     bool                mAsyncInitialized { false };
@@ -119,9 +103,16 @@ private:
 //=================================================================================
 
 template <typename impl_t>
-inline Streamer<impl_t>::Streamer(config const &aConfig) :
-    mConfig(aConfig)
+inline Streamer<impl_t>::Streamer(config const &aConfig, Delegate::pointer aDelegate) :
+    mConfig(aConfig), mDelegate(aDelegate)
 {}
+
+
+template <typename impl_t>
+inline void Streamer<impl_t>::unlockIO()
+{
+    mLoopSemaphore.release();
+}
 
 template <typename impl_t>
 inline int Streamer<impl_t>::streamer_init(uv_loop_t *aLoop)
@@ -233,7 +224,7 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
             collector.append(ReadBuffer{aBuf->base, (std::size_t)aNread});
 
         while(collector.status() == CollectorStatus::HasMessage)
-            onMessage(thePipe->descriptor(), collector);
+            mDelegate->onMessage(thePipe->descriptor(), collector);
 
         if(collector.status() == CollectorStatus::Corrupt)
             thePipe->close(UV_ECONNABORTED);
@@ -248,7 +239,7 @@ inline void Streamer<impl_t>::adopt(UVPipe *aPipe) // only on IO thread
     assert(found == mPipes.end());
     mPipes.insert({aPipe->descriptor(), aPipe});
 
-    onNewPipe(aPipe->descriptor());
+    mDelegate->onNewPipe(aPipe->descriptor());
 }
 
 
@@ -376,7 +367,7 @@ inline void Streamer<impl_t>::onClose(Descriptor aDescriptor, int aCode) // on t
     if(found != mPipes.end())
         mPipes.erase(found);
 
-    onPipeClosed(aDescriptor, aCode);
+    mDelegate->onPipeClosed(aDescriptor, aCode);
 }
 
 }

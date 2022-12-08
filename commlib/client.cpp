@@ -5,8 +5,8 @@
 #include <iostream>
 namespace uvcomms4
 {
-    Client::Client(config const & aConfig) :
-        Streamer(aConfig)
+    Client::Client(config const & aConfig, ClientDelegate::pointer aDelegate) :
+        Streamer(aConfig, aDelegate)
     {
         std::promise<void> initPromise;
         auto initFuture = initPromise.get_future();

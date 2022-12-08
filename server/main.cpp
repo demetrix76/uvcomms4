@@ -1,6 +1,7 @@
 #include <iostream>
 
-#include "SampleServer.h"
+#include <commlib/server.h>
+#include <commlib/delegate.h>
 #include <vector>
 #include <memory>
 
@@ -8,30 +9,48 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-void test_connection()
+
+class SampleServerDelegate: public uvcomms4::ServerDelegate
 {
-    std::cout << "TESTING CONNECTION\n";
-    uvcomms4::config cfg = uvcomms4::config::get_default();
-    std::string sock_path = uvcomms4::pipe_name(cfg);
+public:
 
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    void onStartup(uvcomms4::Server *aServer) override
+    {
+        // reminder: Constructor thread
+        mServer = aServer;
+        std::cout << "[SampleServer] Startup\n";
+    }
 
-    sockaddr_un addr {};
-    addr.sun_family = AF_UNIX;
-    std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path));
+    void onShutdown() override
+    {
+        // reminder: Destructor thread
+        std::cout << "[SampleServer] Shutdown\n";
+    }
 
-    // connect(fd, (sockaddr const *)&addr, SUN_LEN(&addr)); // SUN_LEN triggers UB sanitizer
-    connect(fd, (sockaddr const *)&addr, sizeof(sockaddr_un));
+    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector) override
+    {
+        // reminder: IO thread
+        // we MUST extract the message here; otherwise, we'll have an infinite loop
+        auto [status, message] = aCollector.getMessage<std::string>();
+        if(status == uvcomms4::CollectorStatus::HasMessage)
+            std::cout << "[SampleServer] MESSAGE: " << message << std::endl;
+    }
 
-    constexpr std::size_t sz = 256 * 1024;
-    std::vector<char> buffer;
-    buffer.resize(sz);
+    void onNewPipe(uvcomms4::Descriptor aDescriptor) override
+    {
+        // reminder: IO thread
+        std::cout << "[SampleServer] New pipe: " << aDescriptor << std::endl;
+    }
 
-    write(fd, std::data(buffer), sz);
+    void onPipeClosed(uvcomms4::Descriptor aDescriptor, int aErrorCode) override
+    {
+        // reminder: IO thread
+        std::cout << "[SampleServer] Pipe closed: " << aDescriptor << "; error code " << aErrorCode << std::endl;
+    }
 
-    char read_buffer[16];
-    read(fd, read_buffer, 16);
-}
+private:
+    uvcomms4::Server       *mServer { nullptr };
+};
 
 int main(int, char*[])
 {
@@ -39,9 +58,7 @@ int main(int, char*[])
     std::cout << "Hi there\n";
     try
     {
-        svr::SampleServer server(uvcomms4::config::get_default());
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        uvcomms4::Server server(uvcomms4::config::get_default(), std::make_shared<SampleServerDelegate>());
 
         std::cout << "Hit Enter to stop...\n";
         std::string s;
