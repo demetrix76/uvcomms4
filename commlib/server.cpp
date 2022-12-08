@@ -44,6 +44,7 @@ namespace uvcomms4
 
     Server::~Server()
     {
+        mDelegate->onShutdown();
         request_stop();
         mThread.join();
     }

@@ -26,10 +26,26 @@ namespace uvcomms4
             mThread.join();
             throw;
         }
+
+        try
+        {
+            aDelegate->onStartup(this);
+        }
+
+        catch(...)
+        {
+            request_stop();
+            unlockIO();
+            mThread.join();
+            throw;
+        }
+
+        unlockIO();
     }
 
     Client::~Client()
     {
+        mDelegate->onShutdown();
         request_stop();
         mThread.join();
     }
@@ -40,7 +56,7 @@ namespace uvcomms4
         UVLoop theLoop;
         try
         {
-            // todo setup availability monitor[s]
+            // todo setup availability monitor[s]... or do it on a higher level
 
             if(int r = ensure_socket_directory_exists(mConfig); r != 0)
                 throw std::system_error(std::error_code(r, std::system_category()), "Cannot create socket directory");
@@ -63,7 +79,8 @@ namespace uvcomms4
 
         aInitPromise.set_value();
 
-        trigger_async();
+        mLoopSemaphore.acquire();
+        trigger_async(); // [TODO] replace this
 
         std::cout << "Client loop running...\n";
         uv_run(theLoop, UV_RUN_DEFAULT);
