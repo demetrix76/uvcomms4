@@ -1,6 +1,6 @@
 #include "client.h"
-#include <commlib/uvx.h>
-#include <commlib/commlib.h>
+#include "uvx.h"
+#include "commlib.h"
 
 #include <iostream>
 namespace uvcomms4

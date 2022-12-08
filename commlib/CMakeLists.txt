@@ -8,6 +8,10 @@ set(SOURCES
     pack.h
     uvwrite.h
     collector.h
+    server.h
+    server.cpp
+    client.h
+    client.cpp
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

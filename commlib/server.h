@@ -1,8 +1,8 @@
 #pragma once
 
-#include <commlib/commlib.h>
-#include <commlib/uvx.h>
-#include <commlib/Streamer.h>
+#include "commlib.h"
+#include "uvx.h"
+#include "Streamer.h"
 #include <uv.h>
 #include <thread>
 #include <future>

@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "client.h"
+#include <commlib/client.h>
 
 int main(int, char*[])
 {

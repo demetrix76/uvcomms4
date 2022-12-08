@@ -1,9 +1,6 @@
 #include <iostream>
 
-#include "server.h"
-#include <commlib/commlib.h>
-#include <commlib/uvx.h>
-#include <commlib/pack.h>
+#include <commlib/server.h>
 #include <vector>
 #include <memory>
 
