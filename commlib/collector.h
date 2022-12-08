@@ -43,7 +43,7 @@ namespace uvcomms4
         ReadBuffer & operator = (ReadBuffer const &) = delete;
 
         char * data() noexcept { return mData; }
-        std::size_t size() noexcept { return mSize; }
+        std::size_t size() const noexcept { return mSize; }
 
         // to keep things toghether
         static char *memalloc(std::size_t aSize)

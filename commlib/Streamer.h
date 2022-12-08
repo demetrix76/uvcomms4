@@ -30,12 +30,42 @@ public:
 
     Streamer(config const & aConfig);
 
+    /** Send the message and get the result as an std::future<>.
+     *  Returns 0 un success, UV error code on failure (negative value).
+     *  May be called from any thread.
+    */
     template<MessageableContainer message_t>
     std::future<int> send(Descriptor aPipeDescriptor, message_t && aMessage);
 
-
+    /** Send the message anc get the result via the supplied callback
+     *  'Returns' 0 un success, UV error code on failure (negative value).
+     *  May be called from any thread.
+    */
     template<MessageableContainer message_t, MessageSendCallback callback_t>
     void send(Descriptor aPipeDescriptor, message_t && aMessage, callback_t && aCallback);
+
+    /** Called when a new complete incoming message becomes available.
+     *  Called on the IO thread and the supplied Collector must only be accessed from the IO thread;
+     *  Extract the message before moving to another thread.
+    */
+    virtual void onMessage(Descriptor aDescriptor, Collector & aCollector) {
+        // if we don't extract the message, we'll get an infitite loop
+        auto [status, message] = aCollector.getMessage<std::string>();
+        if(status == CollectorStatus::HasMessage)
+            std::cout << "MESSAGE: " << message << std::endl;
+    } // todo make pure virtual
+
+    /// called when a new pipe was connected; IO thread
+    virtual void onNewPipe(Descriptor aDescriptor)
+    {
+        std::cout << "New pipe with descriptor " << aDescriptor << std::endl;
+    }
+
+    /// IO thread
+    virtual void onPipeClosed(Descriptor aDescriptor, int aErrorCode)
+    {
+        std::cout << "Pipe closed; descriptor " << aDescriptor << ", error code " << aErrorCode << std::endl;
+    }
 
 
 protected:
@@ -55,6 +85,7 @@ protected:
     void onAlloc(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf);
     void onRead(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf);
     void onWrite(uv_write_t* aReq, int aStatus);
+    void onClose(Descriptor aDescriptor, int aCode);
 
     // take control of the pipe
     void adopt(UVPipe* aPipe);
@@ -63,6 +94,7 @@ private:
     void onAsyncBase(uv_async_t * aAsync);
 
     void pendingWritesProcess();
+    void pendingWritesAbort();
 
 
 protected:
@@ -140,7 +172,7 @@ inline void Streamer<impl_t>::onAsyncBase(uv_async_t *aAsync)
 {
     if(mStopRequested.load())
     {
-        // todo pendingWritesAbort();
+        pendingWritesAbort();
         uv_stop(aAsync->loop);
         return;
     }
@@ -169,23 +201,43 @@ inline void Streamer<impl_t>::onAlloc(uv_handle_t *aHandle, size_t aSuggested_si
 template <typename impl_t>
 inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const uv_buf_t *aBuf)
 {
+    UVPipe *thePipe = UVPipe::fromHandle(aStream);
+
     if(aNread == UV_EOF)
     {
+        ReadBuffer::memfree(aBuf->base);
         std::cout << "EOF reached\n";
-        // we need to close the pipe but somehow prevent crashes if more write requests arrive
-        // also need to check if we have a complete message received
+
+        // this callback does not add new data so there's no need to check the Collector for complete messages
+        // but we might want to know if there's an incomplete message?
+        if(thePipe->collector().contains(1))
+            std::cerr << "WARNING: end of stream reached but there's a (possibly) icomplete message in the read buffer!\n";
+
+        thePipe->close(0);
     }
     else if(aNread < 0)
     {
+        ReadBuffer::memfree(aBuf->base);
         report_uv_error(std::cerr, (int)aNread, "Error reading from a pipe");
-        // we need to close the pipe but somehow prevent crashes if more write requests arrive
+        thePipe->close((int)aNread);
+        // we need to close the pipe but somehow prevent crashes if more write requests arrive;
     }
     else
     {
-        // N.B. zero length reads are possible, avoid adding such buffers
         std::cout << "Received " << aNread << " bytes\n";
+        // N.B. zero length reads are possible, avoid adding such buffers
+        // zero-length messages are allowed but they will have at least 8 bytes of header
+        Collector & collector = thePipe->collector();
+
+        if(aNread > 0)
+            collector.append(ReadBuffer{aBuf->base, (std::size_t)aNread});
+
+        while(collector.status() == CollectorStatus::HasMessage)
+            onMessage(thePipe->descriptor(), collector);
+
+        if(collector.status() == CollectorStatus::Corrupt)
+            thePipe->close(UV_ECONNABORTED);
     }
-    std::free(aBuf->base);
 }
 
 
@@ -195,6 +247,8 @@ inline void Streamer<impl_t>::adopt(UVPipe *aPipe) // only on IO thread
     auto found = mPipes.find(aPipe->descriptor());
     assert(found == mPipes.end());
     mPipes.insert({aPipe->descriptor(), aPipe});
+
+    onNewPipe(aPipe->descriptor());
 }
 
 
@@ -280,12 +334,49 @@ inline void Streamer<impl_t>::pendingWritesProcess() // called on the IO thread
 
 }
 
+
 template <typename impl_t>
-inline void Streamer<impl_t>::onWrite(uv_write_t *aReq, int aStatus)
+inline void Streamer<impl_t>::pendingWritesAbort()
+{
+    mWriteQueueTemporary.clear();
+    {
+        std::lock_guard lk(mMx);
+        mWriteQueueTemporary.swap(mWriteQueue);
+    }
+
+    for(std::unique_ptr<detail::IWriteRequest> & req: mWriteQueueTemporary)
+    {
+        auto found_pipe = mPipes.find(req->pipeDescriptor);
+        if(found_pipe == mPipes.end())
+        {
+            req->complete(UV_ENOTCONN);
+            req.reset();
+        }
+        else
+        {
+            UVPipe *thePipe = found_pipe->second;
+            thePipe->close(UV_ECONNABORTED);
+        }
+    }
+}
+
+
+template <typename impl_t>
+inline void Streamer<impl_t>::onWrite(uv_write_t *aReq, int aStatus) // on the IO thread
 {
     std::unique_ptr<detail::IWriteRequest> iwrq { static_cast<detail::IWriteRequest*>(aReq->data) };
     iwrq->complete(aStatus);
 }
 
+
+template <typename impl_t>
+inline void Streamer<impl_t>::onClose(Descriptor aDescriptor, int aCode) // on the IO thread
+{
+    auto found = mPipes.find(aDescriptor);
+    if(found != mPipes.end())
+        mPipes.erase(found);
+
+    onPipeClosed(aDescriptor, aCode);
+}
 
 }

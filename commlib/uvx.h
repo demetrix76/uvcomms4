@@ -1,6 +1,7 @@
 #pragma once
 
 #include "commlib.h"
+#include "collector.h"
 #include <uv.h>
 #include <system_error>
 #include <iostream>
@@ -114,8 +115,9 @@ public:
         return r;
     }
 
-    void close()
+    void close(int aCloseCode = 0)
     {
+        mCloseCode = aCloseCode;
         uv_close(*this, &close_cb);
     }
 
@@ -140,6 +142,11 @@ public:
     Descriptor descriptor() const noexcept
     {
         return mDescriptor;
+    }
+
+    Collector & collector()
+    {
+        return mCollector;
     }
 
     std::size_t recvBufferSize() const noexcept
@@ -184,7 +191,9 @@ public:
     static void close_cb(uv_handle_t * aHandle)
     {
         static_assert(std::is_same_v<decltype(&UVPipeT<owner_t>::close_cb), ::uv_close_cb>);
-        delete fromHandle(aHandle);
+        UVPipeT* p = UVPipeT::fromHandle(aHandle);
+        p->owner()->onClose(p->descriptor(), p->mCloseCode);
+        delete p;
     }
 
     static void alloc_cb(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf)
@@ -212,6 +221,8 @@ private:
     owner_t*        mOwner { nullptr };
     int             mRecvBufferSize {0};
     std::uint64_t   mDescriptor {0};
+    Collector       mCollector;
+    int             mCloseCode; // error code to distinguish graceful close from abnormal disconnection
 };
 
 

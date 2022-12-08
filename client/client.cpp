@@ -40,6 +40,8 @@ namespace uvcomms4
         UVLoop theLoop;
         try
         {
+            // todo setup availability monitor[s]
+
             if(int r = ensure_socket_directory_exists(mConfig); r != 0)
                 throw std::system_error(std::error_code(r, std::system_category()), "Cannot create socket directory");
 
@@ -147,6 +149,10 @@ namespace uvcomms4
 
     void Client::Connected(Descriptor aDescriptor)
     {
+        using namespace std::literals;
         std::cout << "Successfully connected; descriptor = " << aDescriptor << std::endl;
+        send(aDescriptor, "Welcome message"s, [](int code){
+            std::cout << "Write result: " << code << std::endl;
+        });
     }
 }
