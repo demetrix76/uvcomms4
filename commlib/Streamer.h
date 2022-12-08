@@ -2,7 +2,7 @@
 
 #include "commlib.h"
 #include "uvx.h"
-#include "uvwrite.h"
+#include "uvrequest.h"
 #include "collector.h"
 #include "delegate.h"
 #include <uv.h>
@@ -43,7 +43,7 @@ public:
      *  'Returns' 0 un success, UV error code on failure (negative value).
      *  May be called from any thread.
     */
-    template<MessageableContainer message_t, MessageSendCallback callback_t>
+    template<MessageableContainer message_t, CompletionCallback<int> callback_t>
     void send(Descriptor aPipeDescriptor, message_t && aMessage, callback_t && aCallback);
 
     // may be called from the Delegate to unleash the IO loop earlier
@@ -90,10 +90,10 @@ private:
     Descriptor          mNextDescriptor { 1 }; // always accessed on the IO thread
 
     std::unordered_map<Descriptor, UVPipe*> mPipes; // always accessed on the IO thread
-
+protected:
     std::mutex          mMx;
-    std::vector<detail::IWriteRequest::pointer_t>   mWriteQueue;
-    std::vector<detail::IWriteRequest::pointer_t>   mWriteQueueTemporary; // for quick swap, only accessed on the IO thread
+    std::vector<detail::IWriteRequest::pointer>   mWriteQueue;
+    std::vector<detail::IWriteRequest::pointer>   mWriteQueueTemporary; // for quick swap, only accessed on the IO thread
 
 
 };
@@ -161,18 +161,20 @@ inline Descriptor Streamer<impl_t>::next_descriptor()
 template <typename impl_t>
 inline void Streamer<impl_t>::onAsyncBase(uv_async_t *aAsync)
 {
+    bool stopping = false;
     if(mStopRequested.load())
     {
+        stopping = true;
         pendingWritesAbort();
         uv_stop(aAsync->loop);
-        return;
     }
 
-    pendingWritesProcess();
+    if(!stopping)
+        pendingWritesProcess();
 
     // call descendant's onAsync if it provides one
-    if constexpr(requires (impl_t* impl, uv_async_t *a) { impl->onAsync(a); })
-        static_cast<impl_t*>(this)->onAsync(aAsync);
+    if constexpr(requires (impl_t* impl, uv_async_t *a, bool b) { impl->onAsync(a, b); })
+        static_cast<impl_t*>(this)->onAsync(aAsync, stopping);
 
  }
 
@@ -263,7 +265,7 @@ inline std::future<int> Streamer<impl_t>::send(Descriptor aPipeDescriptor, messa
 
 
 template <typename impl_t>
-template <MessageableContainer message_t, MessageSendCallback callback_t>
+template <MessageableContainer message_t, CompletionCallback<int> callback_t>
 inline void Streamer<impl_t>::send(Descriptor aPipeDescriptor, message_t &&aMessage, callback_t &&aCallback)
 {
     auto write_req = detail::nonarray_unique_ptr(new detail::WriteRequest(

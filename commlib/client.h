@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Streamer.h"
+#include "uvrequest.h"
 #include <thread>
 #include <future>
 #include <memory>
@@ -8,12 +9,7 @@
 namespace uvcomms4
 {
 
-struct ClientSharedData
-{
-
-};
-
-class Client: public Streamer<Client>
+class Client final: public Streamer<Client>
 {
 public:
     friend UVPipeT<Client>;
@@ -22,22 +18,68 @@ public:
     Client(config const & aConfig, ClientDelegate::pointer aDelegate);
     ~Client();
 
+    // may be called from any thread
+    std::future<detail::IConnectRequest::retval>
+    connect(std::string const & aPipeName);
+
+    // may be called from any thread
+    template <std::invocable<detail::IConnectRequest::retval> callback_t>
+    void connect(std::string const &aPipeName, callback_t && aCallback);
+
+    // deprecated
     virtual void Connected(Descriptor aDescriptor);
 
 private:
     void threadFunction(std::promise<void> aInitPromise);
 
-    void onAsync(uv_async_t * aAsync);
+    void onAsync(uv_async_t * aAsync, bool aStopping);
 
-    void tryConnect(uv_async_t * aAsync);
+    void tryConnectOld(uv_async_t * aAsync);
+
+    void onConnectOld(uv_connect_t* aReq, int aStatus);
 
     void onConnect(uv_connect_t* aReq, int aStatus);
+
+    void initiateConnect(detail::IConnectRequest::pointer aReq, uv_loop_t * aLoop);
+
+    void processPendingConnectRequests(uv_loop_t * aLoop);
+    void abortPendingConnectRequests(uv_loop_t * aLoop);
 
 private:
     std::thread mThread;
 
     std::atomic<bool>   mShouldConnect { true };
+
+    std::vector<detail::IConnectRequest::pointer>  mConnectQueue;
+    std::vector<detail::IConnectRequest::pointer>  mConnectQueueTemporary;
 };
 
+
+//==========================================================================================
+
+inline std::future<detail::IConnectRequest::retval>
+Client::connect(std::string const &aPipeName)
+{
+    auto conn_req = detail::nonarray_unique_ptr(new detail::ConnectRequest(aPipeName));
+    auto ret_future = conn_req->get_future();
+    {
+        std::lock_guard lk(mMx);
+        mConnectQueue.emplace_back(std::move(conn_req));
+    }
+    trigger_async();
+    return ret_future;
+}
+
+template <std::invocable<detail::IConnectRequest::retval> callback_t>
+inline void Client::connect(std::string const &aPipeName, callback_t &&aCallback)
+{
+    auto conn_req = detail::nonarray_unique_ptr(
+        new detail::ConnectRequest(aPipeName, std::forward<callback_t>(aCallback)));
+    {
+        std::lock_guard lk(mMx);
+        mConnectQueue.emplace_back(std::move(conn_req));
+    }
+    trigger_async();
+}
 
 }

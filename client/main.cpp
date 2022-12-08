@@ -50,9 +50,25 @@ private:
 
 int main(int, char*[])
 {
+    using namespace std::literals;
+
     std::cout << "Hi, client here\n";
 
-    uvcomms4::Client client(uvcomms4::config::get_default(), std::make_shared<SampleClientDelegate>());
+    uvcomms4::config const & cfg = uvcomms4::config::get_default();
+
+    uvcomms4::Client client(cfg, std::make_shared<SampleClientDelegate>());
+
+    client.connect(uvcomms4::pipe_name(cfg), [&](auto result)mutable {
+        using namespace std::literals;
+        auto [descriptor, status] = result;
+        if(0 == status)
+            client.send(descriptor, "Wilkommen Bienvenue Welcome"s, [](int){});
+    });
+
+    // auto [descriptor, status] = client.connect(uvcomms4::pipe_name(cfg)).get();
+
+    // if(0 == status)
+    //     client.send(descriptor, "Wilkommen Bienvenue Welcome"s, [](auto){});
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 

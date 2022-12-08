@@ -6,7 +6,7 @@ set(SOURCES
     uvx.h
     Streamer.h
     pack.h
-    uvwrite.h
+    uvrequest.h
     collector.h
     server.h
     server.cpp

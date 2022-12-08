@@ -80,7 +80,7 @@ namespace uvcomms4
         aInitPromise.set_value();
 
         mLoopSemaphore.acquire();
-        trigger_async(); // [TODO] replace this
+        //trigger_async(); // [TODO] replace this
 
         std::cout << "Client loop running...\n";
         uv_run(theLoop, UV_RUN_DEFAULT);
@@ -109,67 +109,151 @@ namespace uvcomms4
     }
 
 
-    void Client::onAsync(uv_async_t *aAsync)
+    void Client::onAsync(uv_async_t *aAsync, bool aStopping)
     {
         std::cout << "Client::onAsync\n";
-        if(mShouldConnect)
-            tryConnect(aAsync);
+        // if(mShouldConnect)
+        //     tryConnectOld(aAsync);
+        if(aStopping)
+            abortPendingConnectRequests(aAsync->loop);
+        else
+            processPendingConnectRequests(aAsync->loop);
+
     }
 
 
-    void Client::tryConnect(uv_async_t *aAsync)
+    void Client::tryConnectOld(uv_async_t *aAsync)
     {
-        mShouldConnect = false;
-        std::cout << "Attempting to connect...\n";
+        // mShouldConnect = false;
+        // std::cout << "Attempting to connect...\n";
 
-        UVPipe * connection = new UVPipe(this, next_descriptor());
+        // UVPipe * connection = new UVPipe(this, next_descriptor());
 
-        if(int r = connection->init(aAsync->loop, 0); r < 0)
-        {
-            delete connection;
-            report_uv_error(std::cerr, r, "WARNING: cannot initialize a pipe to connect to the server");
-            return;
-        }
+        // if(int r = connection->init(aAsync->loop, 0); r < 0)
+        // {
+        //     delete connection;
+        //     report_uv_error(std::cerr, r, "WARNING: cannot initialize a pipe to connect to the server");
+        //     return;
+        // }
 
-        // once initialized, we should no longer delete the UVPipe object upon failure,
-        // but rather let uv_close_cb do it
-        uv_connect_t *req = new uv_connect_t(); // we may only delete it in onConnect()
+        // // once initialized, we should no longer delete the UVPipe object upon failure,
+        // // but rather let uv_close_cb do it
+        // uv_connect_t *req = new uv_connect_t(); // we may only delete it in onConnect()
 
-        uv_pipe_connect(req, *connection, pipe_name(mConfig).c_str(), &UVPipe::connect_cb);
+        // uv_pipe_connect(req, *connection, pipe_name(mConfig).c_str(), &UVPipe::connect_cb);
     }
 
 
-    void Client::onConnect(uv_connect_t *aReq, int aStatus)
+    void Client::onConnectOld(uv_connect_t *aReq, int aStatus)
     {
-        std::unique_ptr<uv_connect_t> req(aReq); // take care of the request memory at function exit
-        std::cout << "onConnect";
-        UVPipe * connection = UVPipe::fromHandle(req->handle);
+        // std::unique_ptr<uv_connect_t> req(aReq); // take care of the request memory at function exit
+        // std::cout << "onConnect";
+        // UVPipe * connection = UVPipe::fromHandle(req->handle);
+        // if(aStatus < 0)
+        // {
+        //     report_uv_error(std::cerr, aStatus, "INFO: connection to the server failed. This may be normal if it is not running");
+        //     connection->close();
+        // }
+        // else
+        // { // connection succeeded; we need to initiate read and let Streamer take control
+        //     if(int r = connection->read_start(); r < 0)
+        //     {
+        //         report_uv_error(std::cerr, r, "WARNING: cannot start reading from an incoming connection");
+        //         connection->close();
+        //         return;
+        //     }
+
+        //     adopt(connection);
+        //     Connected(connection->descriptor());
+        // }
+    }
+
+
+    void Client::onConnect(uv_connect_t *aReq, int aStatus) // connect callback
+    {
+        std::unique_ptr<detail::IConnectRequest> theReq { // take control over the pointer
+            static_cast<detail::IConnectRequest*>(aReq->data) };
+
+        std::cout << "OnConnnect\n";
+
+        UVPipe *connection = UVPipe::fromHandle(theReq->uv_connect_request.handle);
         if(aStatus < 0)
         {
-            report_uv_error(std::cerr, aStatus, "INFO: connection to the server failed. This may be normal if it is not running");
-            connection->close();
+            // do we need to close the pipe? or just deallocate it?
+            theReq->complete({0, aStatus});
+            connection->close(); // we need to call close anyway (confirmed by ASAN)
         }
         else
-        { // connection succeeded; we need to initiate read and let Streamer take control
+        {
             if(int r = connection->read_start(); r < 0)
             {
-                report_uv_error(std::cerr, r, "WARNING: cannot start reading from an incoming connection");
+                theReq->complete({0, r});
                 connection->close();
                 return;
             }
-
             adopt(connection);
-            Connected(connection->descriptor());
+            theReq->complete({connection->descriptor(), 0});
         }
+    }
+
+
+    void Client::initiateConnect(detail::IConnectRequest::pointer aReq, uv_loop_t *aLoop)
+    {
+        std::cout << "Attempting to connect...\n";
+
+        UVPipe *connection = new UVPipe(this, next_descriptor());
+
+        if(int r = connection->init(aLoop, 0); r < 0)
+        {
+            delete connection;
+            aReq->complete({0, r});
+            return;
+        }
+
+        // once uv_pipe_connect has been called, we should no longer
+        // delete neither the request nor the pipe handle;
+        // may only do this in onConnect()
+        detail::IConnectRequest *theReq = aReq.release();
+        uv_pipe_connect(&theReq->uv_connect_request, *connection, theReq->pipe_name.c_str(), &UVPipe::connect_cb);
+    }
+
+
+    void Client::processPendingConnectRequests(uv_loop_t * aLoop) // IO thread
+    {
+        mConnectQueueTemporary.clear();
+        {
+            std::lock_guard lk(mMx);
+            mConnectQueueTemporary.swap(mConnectQueue);
+        }
+
+        for(std::unique_ptr<detail::IConnectRequest> & req: mConnectQueueTemporary)
+            initiateConnect(std::move(req), aLoop);
+
+        mConnectQueueTemporary.clear();
+    }
+
+
+    void Client::abortPendingConnectRequests(uv_loop_t * aLoop) // IO thread
+    {
+        mConnectQueueTemporary.clear();
+        {
+            std::lock_guard lk(mMx);
+            mConnectQueueTemporary.swap(mConnectQueue);
+        }
+
+        for(std::unique_ptr<detail::IConnectRequest> & req: mConnectQueueTemporary)
+            req->complete({0, UV_ECONNABORTED});
+
+        mConnectQueueTemporary.clear();
     }
 
 
     void Client::Connected(Descriptor aDescriptor)
     {
-        using namespace std::literals;
-        std::cout << "Successfully connected; descriptor = " << aDescriptor << std::endl;
-        send(aDescriptor, "Welcome message"s, [](int code){
-            std::cout << "Write result: " << code << std::endl;
-        });
+        // using namespace std::literals;
+        // std::cout << "Successfully connected; descriptor = " << aDescriptor << std::endl;
+        // send(aDescriptor, "Welcome message"s, [](int code){
+        //     std::cout << "Write result: " << code << std::endl;
+        // });
     }
 }
