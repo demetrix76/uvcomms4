@@ -134,7 +134,6 @@ public:
 // we probably don't need buf buffers as our messages will not be huge
         bfsize = std::min(bfsize, 64 * 1024);
         mRecvBufferSize = bfsize;
-        std::cout << "Receive buffer size " << mRecvBufferSize << std::endl;
 #endif
         return r;
     }

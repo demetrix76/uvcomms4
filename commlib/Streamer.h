@@ -199,7 +199,6 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
     if(aNread == UV_EOF)
     {
         ReadBuffer::memfree(aBuf->base);
-        std::cout << "EOF reached\n";
 
         // this callback does not add new data so there's no need to check the Collector for complete messages
         // but we might want to know if there's an incomplete message?
@@ -217,7 +216,6 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
     }
     else
     {
-        std::cout << "Received " << aNread << " bytes\n";
         // N.B. zero length reads are possible, avoid adding such buffers
         // zero-length messages are allowed but they will have at least 8 bytes of header
         Collector & collector = thePipe->collector();

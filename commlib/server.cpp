@@ -110,9 +110,9 @@ namespace uvcomms4
 
         mLoopSemaphore.acquire();
 
-        std::cout << "Server loop running...\n";
+        //std::cout << "Server loop running...\n";
         uv_run(theLoop, UV_RUN_DEFAULT);
-        std::cout << "Server loop done, cleaning up\n";
+        //std::cout << "Server loop done, cleaning up\n";
 
         uvcomms4::uv_close_x(mListeningPipe);
 

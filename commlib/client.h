@@ -26,17 +26,11 @@ public:
     template <std::invocable<detail::IConnectRequest::retval> callback_t>
     void connect(std::string const &aPipeName, callback_t && aCallback);
 
-    // deprecated
-    virtual void Connected(Descriptor aDescriptor);
 
 private:
     void threadFunction(std::promise<void> aInitPromise);
 
     void onAsync(uv_async_t * aAsync, bool aStopping);
-
-    void tryConnectOld(uv_async_t * aAsync);
-
-    void onConnectOld(uv_connect_t* aReq, int aStatus);
 
     void onConnect(uv_connect_t* aReq, int aStatus);
 
@@ -47,8 +41,6 @@ private:
 
 private:
     std::thread mThread;
-
-    std::atomic<bool>   mShouldConnect { true };
 
     std::vector<detail::IConnectRequest::pointer>  mConnectQueue;
     std::vector<detail::IConnectRequest::pointer>  mConnectQueueTemporary;
