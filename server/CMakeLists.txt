@@ -2,6 +2,8 @@ set(TARGET_NAME server)
 
 set(SOURCES
     main.cpp
+    SampleServer.h
+    SampleServer.cpp
 )
 
 add_executable(${TARGET_NAME} ${SOURCES})
