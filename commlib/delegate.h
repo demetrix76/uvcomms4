@@ -1,6 +1,7 @@
 #pragma once
 
 #include "commlib.h"
+#include "collector.h"
 #include <memory>
 
 namespace uvcomms4
@@ -61,6 +62,30 @@ namespace uvcomms4
         virtual void onStartup(Client *aClient) = 0;
     };
 
+    class Piper;
+
+    class PiperDelegate
+    {
+    public:
+        using pointer = std::shared_ptr<PiperDelegate>;
+
+        virtual ~PiperDelegate() {}
+
+        /** Called on the Constructor thread after the IO thread has started.
+         *  This function is allowed to throw in case of errors —
+         *  in this case, the loop will be stopped and Piper construction aborted.
+         *  Piper does not issue any requests at its own volition so
+         *  there will be no unexpected calls to the Delegate until our
+         *  StartupFunction initiates something.
+        */
+        virtual void Startup(Piper * aPiper) = 0;
+
+        /** Called on the Destructor thread before issuing a stop request for the IO thread.
+         *  Normally, doesn't need to do anything. Any listeners and other open pipes will be closed automatically.
+         *  Not allowed to throw
+        */
+        virtual void Shutdown() noexcept = 0;
+    };
 
 
 

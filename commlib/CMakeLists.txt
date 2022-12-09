@@ -13,6 +13,10 @@ set(SOURCES
     client.h
     client.cpp
     delegate.h
+    piper.h
+    piper.cpp
+    wrappers.h
+    final_act.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

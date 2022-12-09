@@ -2,6 +2,7 @@
 
 #include <commlib/server.h>
 #include <commlib/delegate.h>
+#include <commlib/piper.h>
 #include <vector>
 #include <memory>
 
@@ -9,6 +10,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <signal.h>
+
+#include <type_traits>
 
 
 class SampleServerDelegate: public uvcomms4::ServerDelegate
@@ -54,17 +57,37 @@ private:
 
 void echo_run();
 
+class PiperServerDelegate : public uvcomms4::PiperDelegate
+{
+public:
+    void Startup(uvcomms4::Piper *aPiper) override
+    {
+        mServer = aPiper;
+    }
+
+    void Shutdown() noexcept override
+    {
+
+    }
+
+private:
+    uvcomms4::Piper *mServer { nullptr };
+};
+
+
 int main(int, char*[])
 {
+
     signal(SIGPIPE, SIG_IGN);
-    echo_run();
-    return 0;
+    //echo_run();
+    // return 0;
 
     using namespace std::literals;
     std::cout << "Hi there\n";
     try
     {
-        uvcomms4::Server server(uvcomms4::config::get_default(), std::make_shared<SampleServerDelegate>());
+        //uvcomms4::Server server(uvcomms4::config::get_default(), std::make_shared<SampleServerDelegate>());
+        uvcomms4::Piper server(std::make_shared<PiperServerDelegate>());
 
         std::cout << "Hit Enter to stop...\n";
         std::string s;
