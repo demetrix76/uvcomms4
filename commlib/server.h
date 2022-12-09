@@ -1,8 +1,8 @@
 #pragma once
 
-#include <commlib/commlib.h>
-#include <commlib/uvx.h>
-#include <commlib/Streamer.h>
+#include "commlib.h"
+#include "uvx.h"
+#include "Streamer.h"
 #include <uv.h>
 #include <thread>
 #include <future>
@@ -11,12 +11,12 @@
 namespace uvcomms4
 {
 
-class Server : public Streamer<Server>
+class Server final : public Streamer<Server>
 {
 public:
     friend UVPipeT<Server>;
 
-    Server(config const & aConfig);
+    Server(config const & aConfig, ServerDelegate::pointer aDelegate);
     ~Server();
 
 private:

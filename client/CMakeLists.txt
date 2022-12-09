@@ -2,8 +2,7 @@ set(TARGET_NAME client)
 
 set(SOURCES
     main.cpp
-    client.h
-    client.cpp
+    echo_c.cpp
 )
 
 add_executable(${TARGET_NAME} ${SOURCES})

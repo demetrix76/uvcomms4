@@ -1,13 +1,12 @@
 #include "server.h"
 
-#include <commlib/uvx.h>
 #include <iostream>
 #include <type_traits>
 
 namespace uvcomms4
 {
-    Server::Server(config const &aConfig) :
-        Streamer(aConfig)
+    Server::Server(config const &aConfig, ServerDelegate::pointer aDelegate) :
+        Streamer(aConfig, aDelegate)
     {
         std::promise<void> initPromise;
         auto initFuture = initPromise.get_future();
@@ -27,10 +26,25 @@ namespace uvcomms4
             mThread.join();
             throw;
         }
+
+        try
+        {
+            aDelegate->onStartup(this);
+        }
+        catch(...)
+        {
+            request_stop();
+            unlockIO();
+            mThread.join();
+            throw;
+        }
+
+        unlockIO();
     }
 
     Server::~Server()
     {
+        mDelegate->onShutdown();
         request_stop();
         mThread.join();
     }
@@ -42,7 +56,7 @@ namespace uvcomms4
         bool listener_initialized = false;
         try
         {
-            // [TODO] acquire file lock first
+            // [TODO] acquire file lock first...or do it on a higher level?
 
             if(int r = delete_socket_file(mConfig); r != 0)
                 throw std::system_error(std::error_code(r, std::system_category()), "Cannot delete socket file");
@@ -94,9 +108,11 @@ namespace uvcomms4
 
         aInitPromise.set_value();
 
-        std::cout << "Server loop running...\n";
+        mLoopSemaphore.acquire();
+
+        //std::cout << "Server loop running...\n";
         uv_run(theLoop, UV_RUN_DEFAULT);
-        std::cout << "Server loop done, cleaning up\n";
+        //std::cout << "Server loop done, cleaning up\n";
 
         uvcomms4::uv_close_x(mListeningPipe);
 

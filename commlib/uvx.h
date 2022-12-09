@@ -131,10 +131,9 @@ public:
 // as per libUV docs, "Linux will set double the size and return double the size of the original set value."
 // apparently, this only means that the real buffer size is twice as big as requested; no need to divide it here
 #endif
-// we probably don't need buf buffers as our messages will not be huge
+// we probably don't need big buffers as our messages will not be huge
         bfsize = std::min(bfsize, 64 * 1024);
         mRecvBufferSize = bfsize;
-        std::cout << "Receive buffer size " << mRecvBufferSize << std::endl;
 #endif
         return r;
     }

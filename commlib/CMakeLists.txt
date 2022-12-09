@@ -6,8 +6,13 @@ set(SOURCES
     uvx.h
     Streamer.h
     pack.h
-    uvwrite.h
+    uvrequest.h
     collector.h
+    server.h
+    server.cpp
+    client.h
+    client.cpp
+    delegate.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

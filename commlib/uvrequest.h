@@ -8,7 +8,7 @@
 #include <memory>
 #include <concepts>
 #include <type_traits>
-
+#include <tuple>
 
 namespace uvcomms4::detail
 {
@@ -31,21 +31,33 @@ namespace uvcomms4
     && std::is_nothrow_move_constructible_v<T>;
 
 
-    template<typename fun_t>
-    concept MessageSendCallback = std::invocable<fun_t, int>;
+    template<typename fun_t, typename retval_t>
+    concept CompletionCallback =
+        std::invocable<fun_t, retval_t>
+     && std::is_nothrow_move_constructible_v<fun_t>;
 }
 
 namespace uvcomms4::detail
 {
 
+/*  Something's not quite right:
+    Ideally, we should always set value to the promise before destroying it
+    to avoid unexpected std::future_error on the future side.
+    Currently, the Streamer/Client code makes sure of that but
+    it would be good if CompletionPolicyPromise could
+    automatically do this in dtor;
+    for consistency, similar behaviour would be beneficial for CompletionPromiseCallback
+*/
+
+template<typename retval_t>
 struct CompletionPolicyPromise
 {
-    using promise_t = std::promise<int>;
-    using future_t = std::future<int>;
+    using promise_t = std::promise<retval_t>;
+    using future_t = std::future<retval_t>;
 
-    void complete_impl(int aRetCode)
+    void complete_impl(retval_t aRetVal)
     {
-        mPromise.set_value(aRetCode);
+        mPromise.set_value(aRetVal);
     }
 
     future_t get_future() { return mPromise.get_future(); }
@@ -54,31 +66,36 @@ struct CompletionPolicyPromise
 };
 
 
-template<MessageSendCallback callback_t>
+template<typename callback_t>
 struct CompletionPolicyCallback
 {
-    template<MessageSendCallback fun_t>
+    using callback_type = callback_t;
+
+    template<typename fun_t>
     CompletionPolicyCallback(fun_t && aCallback) :
         mCallback(std::forward<fun_t>(aCallback))
     {}
 
-    void complete_impl(int aRetCode)
+    template<typename T>
+    void complete_impl(T&& aRetVal)
     {
-        mCallback(aRetCode);
+        mCallback(std::forward<T>(aRetVal));
     }
 
     callback_t mCallback;
 };
 
-template<MessageSendCallback fun_t>
+template<CompletionCallback<int> fun_t>
 CompletionPolicyCallback(fun_t &&) -> CompletionPolicyCallback<std::decay_t<fun_t>>;
 
-
+//================================================================================
+// WRITE REQUEST
+//================================================================================
 
 class IWriteRequest
 {
 public:
-    using pointer_t = std::unique_ptr<IWriteRequest>; // I guess we can't put this to uv_write_t
+    using pointer = std::unique_ptr<IWriteRequest>; // I guess we can't put this to uv_write_t
 
     IWriteRequest(Descriptor aPipeDescriptor, std::size_t aMessageSize) :
         pipeDescriptor(aPipeDescriptor)
@@ -98,7 +115,7 @@ public:
 
     Descriptor pipeDescriptor;
     char header[8] {0};
-    uv_write_t uv_write_request {};
+    uv_write_t uv_write_request {}; // uv_write_request points to IWriteRequest
 };
 
 
@@ -143,11 +160,64 @@ private:
 };
 
 template<MessageableContainer cont_t>
-WriteRequest(Descriptor aPipeDescriptor, cont_t &&) -> WriteRequest<std::decay_t<cont_t>, CompletionPolicyPromise>;
+WriteRequest(Descriptor aPipeDescriptor, cont_t &&) -> WriteRequest<std::decay_t<cont_t>, CompletionPolicyPromise<int>>;
 
 template<MessageableContainer cont_t, typename fun_t>
 WriteRequest(Descriptor aPipeDescriptor, cont_t && aContainer, fun_t && aCallback) ->
     WriteRequest<std::decay_t<cont_t>,  CompletionPolicyCallback<std::decay_t<fun_t>>>;
+
+
+//================================================================================
+// CONNECT REQUEST
+//================================================================================
+
+class IConnectRequest
+{
+public:
+    using retval = std::tuple<Descriptor, int>;
+    using pointer = std::unique_ptr<IConnectRequest>;
+
+    IConnectRequest(std::string const & aPipeName) :
+        pipe_name(aPipeName)
+    {
+        uv_connect_request.data = this;
+    }
+
+    virtual ~IConnectRequest() {}
+
+    virtual void complete(retval const &) = 0;
+
+    std::string    pipe_name;
+    uv_connect_t   uv_connect_request {}; // uv_connect_request points to IConnectRequest
+};
+
+
+template<typename policy_t>
+class ConnectRequest : public IConnectRequest, public policy_t
+{
+public:
+    ConnectRequest(std::string const &aPipeName) :
+        IConnectRequest(aPipeName)
+    {}
+
+    template<typename fun_t>
+    ConnectRequest(std::string const &aPipeName, fun_t && aCallback) :
+        IConnectRequest(aPipeName),
+        policy_t(std::forward<fun_t>(aCallback))
+    {}
+
+    void complete(retval const & aRetVal) override
+    {
+        policy_t::complete_impl(aRetVal);
+    }
+};
+
+ConnectRequest(std::string const &) ->
+    ConnectRequest<CompletionPolicyPromise<IConnectRequest::retval>>;
+
+template<typename fun_t>
+ConnectRequest(std::string const &, fun_t && aCallback) ->
+    ConnectRequest<CompletionPolicyCallback<std::decay_t<fun_t>>>;
 
 
 // in desperate need of unique_ptr type deduction...

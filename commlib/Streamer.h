@@ -2,8 +2,9 @@
 
 #include "commlib.h"
 #include "uvx.h"
-#include "uvwrite.h"
+#include "uvrequest.h"
 #include "collector.h"
+#include "delegate.h"
 #include <uv.h>
 #include <atomic>
 #include <cstdlib>
@@ -13,60 +14,40 @@
 #include <mutex>
 #include <stdexcept>
 #include <limits>
+#include <semaphore>
 
 namespace uvcomms4
 {
 
+// TODO ignore SIGPIPE on Unix?
+
 /** Manages multiple pipes, providing read/write functionality.
  * Client and Server must be based on Streamer
 */
-
-
 template<typename impl_t>
 class Streamer
 {
 public:
     using UVPipe = UVPipeT<impl_t>;
 
-    Streamer(config const & aConfig);
+    Streamer(config const & aConfig, Delegate::pointer aDelegate);
 
     /** Send the message and get the result as an std::future<>.
      *  Returns 0 un success, UV error code on failure (negative value).
-     *  May be called from any thread.
+     *  May be called from any thread except the IO thread (may deadlock waiting on the future)
     */
     template<MessageableContainer message_t>
     std::future<int> send(Descriptor aPipeDescriptor, message_t && aMessage);
 
     /** Send the message anc get the result via the supplied callback
      *  'Returns' 0 un success, UV error code on failure (negative value).
-     *  May be called from any thread.
+     *  May be called from any thread. The callback is called on the IO thread
     */
-    template<MessageableContainer message_t, MessageSendCallback callback_t>
+    template<MessageableContainer message_t, CompletionCallback<int> callback_t>
     void send(Descriptor aPipeDescriptor, message_t && aMessage, callback_t && aCallback);
 
-    /** Called when a new complete incoming message becomes available.
-     *  Called on the IO thread and the supplied Collector must only be accessed from the IO thread;
-     *  Extract the message before moving to another thread.
-    */
-    virtual void onMessage(Descriptor aDescriptor, Collector & aCollector) {
-        // if we don't extract the message, we'll get an infitite loop
-        auto [status, message] = aCollector.getMessage<std::string>();
-        if(status == CollectorStatus::HasMessage)
-            std::cout << "MESSAGE: " << message << std::endl;
-    } // todo make pure virtual
-
-    /// called when a new pipe was connected; IO thread
-    virtual void onNewPipe(Descriptor aDescriptor)
-    {
-        std::cout << "New pipe with descriptor " << aDescriptor << std::endl;
-    }
-
-    /// IO thread
-    virtual void onPipeClosed(Descriptor aDescriptor, int aErrorCode)
-    {
-        std::cout << "Pipe closed; descriptor " << aDescriptor << ", error code " << aErrorCode << std::endl;
-    }
-
+    // may be called from the Delegate to unleash the IO loop earlier
+    void unlockIO();
 
 protected:
     // called on the I/O thread
@@ -98,7 +79,10 @@ private:
 
 
 protected:
-    config              mConfig;
+    config                  mConfig;
+    Delegate::pointer       mDelegate;
+    std::binary_semaphore   mLoopSemaphore { 0 };
+
 private:
     uv_async_t          mAsyncTrigger {};
     bool                mAsyncInitialized { false };
@@ -106,10 +90,10 @@ private:
     Descriptor          mNextDescriptor { 1 }; // always accessed on the IO thread
 
     std::unordered_map<Descriptor, UVPipe*> mPipes; // always accessed on the IO thread
-
+protected:
     std::mutex          mMx;
-    std::vector<detail::IWriteRequest::pointer_t>   mWriteQueue;
-    std::vector<detail::IWriteRequest::pointer_t>   mWriteQueueTemporary; // for quick swap, only accessed on the IO thread
+    std::vector<detail::IWriteRequest::pointer>   mWriteQueue;
+    std::vector<detail::IWriteRequest::pointer>   mWriteQueueTemporary; // for quick swap, only accessed on the IO thread
 
 
 };
@@ -119,9 +103,16 @@ private:
 //=================================================================================
 
 template <typename impl_t>
-inline Streamer<impl_t>::Streamer(config const &aConfig) :
-    mConfig(aConfig)
+inline Streamer<impl_t>::Streamer(config const &aConfig, Delegate::pointer aDelegate) :
+    mConfig(aConfig), mDelegate(aDelegate)
 {}
+
+
+template <typename impl_t>
+inline void Streamer<impl_t>::unlockIO()
+{
+    mLoopSemaphore.release();
+}
 
 template <typename impl_t>
 inline int Streamer<impl_t>::streamer_init(uv_loop_t *aLoop)
@@ -170,18 +161,20 @@ inline Descriptor Streamer<impl_t>::next_descriptor()
 template <typename impl_t>
 inline void Streamer<impl_t>::onAsyncBase(uv_async_t *aAsync)
 {
+    bool stopping = false;
     if(mStopRequested.load())
     {
+        stopping = true;
         pendingWritesAbort();
         uv_stop(aAsync->loop);
-        return;
     }
 
-    pendingWritesProcess();
+    if(!stopping)
+        pendingWritesProcess();
 
     // call descendant's onAsync if it provides one
-    if constexpr(requires (impl_t* impl, uv_async_t *a) { impl->onAsync(a); })
-        static_cast<impl_t*>(this)->onAsync(aAsync);
+    if constexpr(requires (impl_t* impl, uv_async_t *a, bool b) { impl->onAsync(a, b); })
+        static_cast<impl_t*>(this)->onAsync(aAsync, stopping);
 
  }
 
@@ -206,7 +199,6 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
     if(aNread == UV_EOF)
     {
         ReadBuffer::memfree(aBuf->base);
-        std::cout << "EOF reached\n";
 
         // this callback does not add new data so there's no need to check the Collector for complete messages
         // but we might want to know if there's an incomplete message?
@@ -224,7 +216,6 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
     }
     else
     {
-        std::cout << "Received " << aNread << " bytes\n";
         // N.B. zero length reads are possible, avoid adding such buffers
         // zero-length messages are allowed but they will have at least 8 bytes of header
         Collector & collector = thePipe->collector();
@@ -233,7 +224,7 @@ inline void Streamer<impl_t>::onRead(uv_stream_t *aStream, ssize_t aNread, const
             collector.append(ReadBuffer{aBuf->base, (std::size_t)aNread});
 
         while(collector.status() == CollectorStatus::HasMessage)
-            onMessage(thePipe->descriptor(), collector);
+            mDelegate->onMessage(thePipe->descriptor(), collector);
 
         if(collector.status() == CollectorStatus::Corrupt)
             thePipe->close(UV_ECONNABORTED);
@@ -248,7 +239,7 @@ inline void Streamer<impl_t>::adopt(UVPipe *aPipe) // only on IO thread
     assert(found == mPipes.end());
     mPipes.insert({aPipe->descriptor(), aPipe});
 
-    onNewPipe(aPipe->descriptor());
+    mDelegate->onNewPipe(aPipe->descriptor());
 }
 
 
@@ -272,7 +263,7 @@ inline std::future<int> Streamer<impl_t>::send(Descriptor aPipeDescriptor, messa
 
 
 template <typename impl_t>
-template <MessageableContainer message_t, MessageSendCallback callback_t>
+template <MessageableContainer message_t, CompletionCallback<int> callback_t>
 inline void Streamer<impl_t>::send(Descriptor aPipeDescriptor, message_t &&aMessage, callback_t &&aCallback)
 {
     auto write_req = detail::nonarray_unique_ptr(new detail::WriteRequest(
@@ -376,7 +367,7 @@ inline void Streamer<impl_t>::onClose(Descriptor aDescriptor, int aCode) // on t
     if(found != mPipes.end())
         mPipes.erase(found);
 
-    onPipeClosed(aDescriptor, aCode);
+    mDelegate->onPipeClosed(aDescriptor, aCode);
 }
 
 }

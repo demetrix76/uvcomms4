@@ -1,60 +1,71 @@
 #include <iostream>
 
-#include "server.h"
-#include <commlib/commlib.h>
-#include <commlib/uvx.h>
-#include <commlib/pack.h>
+#include <commlib/server.h>
+#include <commlib/delegate.h>
 #include <vector>
 #include <memory>
 
 #include <cstring>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <signal.h>
 
-void test_connection()
+
+class SampleServerDelegate: public uvcomms4::ServerDelegate
 {
-    std::cout << "TESTING CONNECTION\n";
-    uvcomms4::config cfg = uvcomms4::config::get_default();
-    std::string sock_path = uvcomms4::pipe_name(cfg);
+public:
+    void onStartup(uvcomms4::Server *aServer) override
+    {
+        // reminder: Constructor thread
+        mServer = aServer;
+        std::cout << "[SampleServer] Startup\n";
+    }
 
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    void onShutdown() override
+    {
+        // reminder: Destructor thread
+        std::cout << "[SampleServer] Shutdown\n";
+    }
 
-    sockaddr_un addr {};
-    addr.sun_family = AF_UNIX;
-    std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path));
+    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector) override
+    {
+        // reminder: IO thread
+        // we MUST extract the message here; otherwise, we'll have an infinite loop
+        auto [status, message] = aCollector.getMessage<std::string>();
+        if(status == uvcomms4::CollectorStatus::HasMessage)
+            std::cout << "[SampleServer] MESSAGE: " << message << std::endl;
+    }
 
-    // connect(fd, (sockaddr const *)&addr, SUN_LEN(&addr)); // SUN_LEN triggers UB sanitizer
-    connect(fd, (sockaddr const *)&addr, sizeof(sockaddr_un));
+    void onNewPipe(uvcomms4::Descriptor aDescriptor) override
+    {
+        // reminder: IO thread
+        std::cout << "[SampleServer] New pipe: " << aDescriptor << std::endl;
+    }
 
-    constexpr std::size_t sz = 256 * 1024;
-    std::vector<char> buffer;
-    buffer.resize(sz);
+    void onPipeClosed(uvcomms4::Descriptor aDescriptor, int aErrorCode) override
+    {
+        // reminder: IO thread
+        std::cout << "[SampleServer] Pipe closed: " << aDescriptor << "; error code " << aErrorCode << std::endl;
+    }
 
-    write(fd, std::data(buffer), sz);
+private:
+    uvcomms4::Server       *mServer { nullptr };
+};
 
-    char read_buffer[16];
-    read(fd, read_buffer, 16);
-}
+void echo_run();
 
 int main(int, char*[])
 {
+    signal(SIGPIPE, SIG_IGN);
+    echo_run();
+    return 0;
+
     using namespace std::literals;
     std::cout << "Hi there\n";
     try
     {
-        uvcomms4::Server server(uvcomms4::config::get_default());
-        //auto testc_res = std::async(std::launch::async, test_connection);
+        uvcomms4::Server server(uvcomms4::config::get_default(), std::make_shared<SampleServerDelegate>());
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        //auto f1 = server.send(1, "ABCDEFGH"s);
-        // server.send(1, "ABCDEFGH"s, [](int r){
-        //     std::cout << "Lambda send result " << r << std::endl;
-        // });
-
-        //std::this_thread::sleep_for(std::chrono::seconds(1));
-        //std::cout << "Send result: " << f1.get() << std::endl;
-        //testc_res.get();
         std::cout << "Hit Enter to stop...\n";
         std::string s;
         std::getline(std::cin, s, '\n');
