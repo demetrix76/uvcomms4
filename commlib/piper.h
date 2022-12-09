@@ -29,6 +29,9 @@ private:
 
     void onAsync(uv_async_t *aAsync);
 
+    void requireIOThread();
+    void requireNonIOThread();
+
 private:
     PiperDelegate::pointer  mDelegate { nullptr };
     std::thread             mIOThread;

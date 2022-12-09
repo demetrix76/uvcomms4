@@ -2,6 +2,7 @@
 #include "final_act.h"
 #include <optional>
 #include <system_error>
+#include <cassert>
 
 namespace uvcomms4
 {
@@ -82,7 +83,8 @@ namespace uvcomms4
 
     void Piper::onAsync(uv_async_t *aAsync)
     {
-        std::cout << "onAsync\n";
+        requireIOThread();
+
         bool stopRequested = false;
         {
             std::lock_guard lk(mMx);
@@ -94,5 +96,19 @@ namespace uvcomms4
             uv_stop(aAsync->loop);
         }
 
+    }
+
+    inline void Piper::requireIOThread()
+    {
+#ifdef UVCOMMS_THREAD_CHECKS
+        assert(std::this_thread::get_id() == mIOThreadId);
+#endif
+    }
+
+    inline void Piper::requireNonIOThread()
+    {
+#ifdef UVCOMMS_THREAD_CHECKS
+        assert(std::this_thread::get_id() != mIOThreadId);
+#endif
     }
 }

@@ -29,3 +29,7 @@ target_link_libraries(${TARGET_NAME} PUBLIC UV::UV)
 target_include_directories(${TARGET_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
 )
+
+if(UVCOMMS_THREAD_CHECKS)
+    target_compile_definitions(${TARGET_NAME} PUBLIC UVCOMMS_THREAD_CHECKS)
+endif()
