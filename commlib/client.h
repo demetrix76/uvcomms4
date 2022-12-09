@@ -27,6 +27,7 @@ public:
     template <std::invocable<detail::IConnectRequest::retval> callback_t>
     void connect(std::string const &aPipeName, callback_t && aCallback);
 
+    // TODO add disconnect()?
 
 private:
     void threadFunction(std::promise<void> aInitPromise);

@@ -48,8 +48,13 @@ private:
     uvcomms4::Client       *mClient { nullptr };
 };
 
+void run_echo_client();
+
 int main(int, char*[])
 {
+    run_echo_client();
+    return 0;
+
     using namespace std::literals;
 
     std::cout << "Hi, client here\n";

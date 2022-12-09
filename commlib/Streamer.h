@@ -19,11 +19,11 @@
 namespace uvcomms4
 {
 
+// TODO ignore SIGPIPE on Unix?
+
 /** Manages multiple pipes, providing read/write functionality.
  * Client and Server must be based on Streamer
 */
-
-
 template<typename impl_t>
 class Streamer
 {

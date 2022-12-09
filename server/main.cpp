@@ -8,12 +8,12 @@
 #include <cstring>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <signal.h>
 
 
 class SampleServerDelegate: public uvcomms4::ServerDelegate
 {
 public:
-
     void onStartup(uvcomms4::Server *aServer) override
     {
         // reminder: Constructor thread
@@ -52,8 +52,14 @@ private:
     uvcomms4::Server       *mServer { nullptr };
 };
 
+void echo_run();
+
 int main(int, char*[])
 {
+    signal(SIGPIPE, SIG_IGN);
+    echo_run();
+    return 0;
+
     using namespace std::literals;
     std::cout << "Hi there\n";
     try
