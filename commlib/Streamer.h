@@ -34,14 +34,14 @@ public:
 
     /** Send the message and get the result as an std::future<>.
      *  Returns 0 un success, UV error code on failure (negative value).
-     *  May be called from any thread.
+     *  May be called from any thread except the IO thread (may deadlock waiting on the future)
     */
     template<MessageableContainer message_t>
     std::future<int> send(Descriptor aPipeDescriptor, message_t && aMessage);
 
     /** Send the message anc get the result via the supplied callback
      *  'Returns' 0 un success, UV error code on failure (negative value).
-     *  May be called from any thread.
+     *  May be called from any thread. The callback is called on the IO thread
     */
     template<MessageableContainer message_t, CompletionCallback<int> callback_t>
     void send(Descriptor aPipeDescriptor, message_t && aMessage, callback_t && aCallback);

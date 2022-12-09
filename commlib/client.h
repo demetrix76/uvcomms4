@@ -18,11 +18,12 @@ public:
     Client(config const & aConfig, ClientDelegate::pointer aDelegate);
     ~Client();
 
-    // may be called from any thread
+    // todo maybe add an assert to ensure this is not called on the IO thread?
+    // may be called from any thread except the IO thread (may deadlock waiting on the future)
     std::future<detail::IConnectRequest::retval>
     connect(std::string const & aPipeName);
 
-    // may be called from any thread
+    // may be called from any thread; callback is called on the IO thread
     template <std::invocable<detail::IConnectRequest::retval> callback_t>
     void connect(std::string const &aPipeName, callback_t && aCallback);
 

@@ -28,11 +28,11 @@ namespace uvcomms4
          */
         virtual void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector) = 0;
 
-        /// called when a new pipe was connected; either from the Listener (Server)
+        /// called on the IO thread when a new pipe was connected; either from the Listener (Server)
         /// or in response to Connect(Client) IO thread
         virtual void onNewPipe(uvcomms4::Descriptor aDescriptor) = 0;
 
-        /// called when a pipe was closed, either because of an error or normally IO thread
+        /// called on the IO thread when a pipe was closed, either because of an error or normally IO thread
         virtual void onPipeClosed(uvcomms4::Descriptor aDescriptor, int aErrorCode) = 0;
 
         /// called before stopping the Destructor thread (normally must match Constructor)
