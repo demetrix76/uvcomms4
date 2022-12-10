@@ -70,6 +70,12 @@ public:
 
     }
 
+    void onNewConnection(uvcomms4::Descriptor aListener, uvcomms4::Descriptor aPipe) override
+    {
+        std::cout << "Accepted new connection on listener" << aListener <<
+            "; new pipe is " << aPipe << std::endl;
+    }
+
 private:
     uvcomms4::Piper *mServer { nullptr };
 };
@@ -77,17 +83,30 @@ private:
 
 int main(int, char*[])
 {
-
     signal(SIGPIPE, SIG_IGN);
     //echo_run();
     // return 0;
 
     using namespace std::literals;
     std::cout << "Hi there\n";
+
+    uvcomms4::config const & cfg = uvcomms4::config::get_default();
+    uvcomms4::ensure_socket_directory_exists(cfg);
+    uvcomms4::delete_socket_file(cfg);
+
+    std::string pipename = uvcomms4::pipe_name(cfg);
+
     try
     {
         //uvcomms4::Server server(uvcomms4::config::get_default(), std::make_shared<SampleServerDelegate>());
         uvcomms4::Piper server(std::make_shared<PiperServerDelegate>());
+
+        // server.listen("/aaa/nnn", [](uvcomms4::Descriptor desc){
+        //     std::cout << "Listen result " << desc << std::endl;
+        // });
+
+        auto [desc, errcode] = server.listen(pipename.c_str()).get();
+        std::cout << "Listen result " << errcode << std::endl;
 
         std::cout << "Hit Enter to stop...\n";
         std::string s;

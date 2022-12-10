@@ -8,7 +8,7 @@ namespace uvcomms4
 {
 
 // pipe descriptor
-using Descriptor = std::uint64_t;
+using Descriptor = std::int64_t;
 
 struct config
 {

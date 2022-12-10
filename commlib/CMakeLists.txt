@@ -17,6 +17,7 @@ set(SOURCES
     piper.cpp
     wrappers.h
     final_act.h
+    request.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)

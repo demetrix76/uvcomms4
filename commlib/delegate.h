@@ -85,6 +85,10 @@ namespace uvcomms4
          *  Not allowed to throw
         */
         virtual void Shutdown() noexcept = 0;
+
+        /** Called on the IO thread when a new connection is accepted.
+        */
+        virtual void onNewConnection(Descriptor aListener, Descriptor aPipe) = 0;
     };
 
 
