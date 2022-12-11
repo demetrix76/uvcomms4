@@ -18,6 +18,8 @@ class Piper :
     requests::RequestHandler
 {
 public:
+    using UVPipe = detail::UVPipeT<Piper>;
+    friend UVPipe;
     friend struct detail::cb<Piper>;
 
     Piper(PiperDelegate::pointer aDelegate);
@@ -42,6 +44,8 @@ private:
 
     void onRead(uv_stream_t* aStream, ssize_t aNread, const uv_buf_t* aBuf);
     void onAlloc(uv_handle_t* aHandle, size_t aSuggested_size, uv_buf_t* aBuf);
+
+    void onClosed(Descriptor aPipe, int aErrCode); // pipe closed
 
     void requireIOThread();
     void requireNonIOThread();

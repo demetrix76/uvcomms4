@@ -30,28 +30,25 @@ namespace uvcomms4::detail
        The structure pointed to by .data contains the handle as its member.
     */
 
+    /* The idea to use the StandardLayout property didn't work out,
+        so we can use virtual functions; just be careful when casting to/from void*
+    */
+
     struct BaseHandle
     {
-        using deleter_t = void(*)(BaseHandle*);
-
-        BaseHandle(deleter_t aDeleter) :
-            deleter(aDeleter)
+        virtual ~BaseHandle()
         {}
-
-        template<typename T>
-        inline static void deleterFunction(BaseHandle *aWraper)
-        {
-            delete static_cast<T*>(aWraper);
-        }
 
         static void close_cb(uv_handle_t* aHandle)
         {
             auto self = static_cast<BaseHandle*>(aHandle->data);
             if(self)
-                self->deleter(self);
+                delete self;
         }
 
-        deleter_t deleter;
+    protected:
+        int mCloseCode { 0 };
+
     };
 
 
@@ -132,35 +129,44 @@ namespace uvcomms4::detail
     };
 
 
-    struct UVPipe: BaseHandle
+    template<typename owner_t>
+    struct UVPipeT: BaseHandle
     {
-        UVPipe(Descriptor aDescriptor) :
-            BaseHandle { BaseHandle::deleterFunction<UVPipe> },
+        UVPipeT(Descriptor aDescriptor) :
             mDescriptor(aDescriptor)
         {}
 
+        ~UVPipeT()
+        {
+            owner_t* owner = static_cast<owner_t*>(mPipe.loop->data);
+            if(owner)
+            {
+                owner->onClosed(mDescriptor, mCloseCode);
+            }
+        }
+
         Descriptor descriptor() const { return mDescriptor; }
 
-        static UVPipe* init(Descriptor aDescriptor, uv_loop_t *aLoop, bool aIpc = false)
+        static UVPipeT* init(Descriptor aDescriptor, uv_loop_t *aLoop, bool aIpc = false)
         {
-            UVPipe *npipe = new UVPipe(aDescriptor);
+            UVPipeT *npipe = new UVPipeT(aDescriptor);
             if(int r = uv_pipe_init(aLoop, &npipe->mPipe, (int)aIpc); r < 0)
             {
                 delete npipe;
                 return nullptr;
             }
-            npipe->mPipe.data = npipe;
+            npipe->mPipe.data = static_cast<BaseHandle*>(npipe);
             return npipe;
         }
 
-        static UVPipe* fromHandle(uv_pipe_t * aHandle)
+        static UVPipeT* fromHandle(uv_pipe_t * aHandle)
         {
-            return static_cast<UVPipe*>(aHandle->data);
+            return static_cast<UVPipeT*>(static_cast<BaseHandle*>(aHandle->data));
         }
 
-        static UVPipe* fromHandle(uv_stream_t * aHandle)
+        static UVPipeT* fromHandle(uv_stream_t * aHandle)
         {
-            return static_cast<UVPipe*>(aHandle->data);
+            return static_cast<UVPipeT*>(static_cast<BaseHandle*>(aHandle->data));
         }
 
         int bind(char const *aName)
@@ -168,13 +174,12 @@ namespace uvcomms4::detail
             return uv_pipe_bind(*this, aName);
         }
 
-        template<typename owner_t>
         int listen()
         {
+            mIsListener = true;
             return uv_listen(*this, 128, &cb<owner_t>::connection);
         }
 
-        template<typename owner_t>
         int read_start()
         {
             return uv_read_start(*this, &cb<owner_t>::alloc, &cb<owner_t>::read);
@@ -184,13 +189,15 @@ namespace uvcomms4::detail
         operator uv_stream_t* () noexcept { return reinterpret_cast<uv_stream_t*>(&mPipe); }
         operator uv_handle_t* () noexcept { return reinterpret_cast<uv_handle_t*>(&mPipe); }
 
-        void close()
+        void close(int aCloseCode = 0)
         {
+            mCloseCode = aCloseCode;
             uv_close(*this, &BaseHandle::close_cb);
         }
 
         uv_pipe_t mPipe {};
         Descriptor  mDescriptor;
+        bool      mIsListener { false };
     };
 
 

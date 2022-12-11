@@ -125,12 +125,12 @@ namespace uvcomms4
         return mNextDescriptor++;
     }
 
-    void Piper::triggerAsync()
+    void Piper::triggerAsync() // any thread
     {
         uv_async_send(&mAsyncTrigger);
     }
 
-    void Piper::postRequest(requests::Request::pointer aRequest)
+    void Piper::postRequest(requests::Request::pointer aRequest) // any thread
     {
         {
             std::lock_guard lk(mMx);
@@ -165,6 +165,12 @@ namespace uvcomms4
 
     }
 
+    void Piper::onClosed(Descriptor aPipe, int aErrCode)
+    {
+        requireIOThread();
+        mDelegate->onPipeClosed(aPipe, aErrCode);
+    }
+
     //================================================================================================================
     // LISTENING
     //================================================================================================================
@@ -174,13 +180,13 @@ namespace uvcomms4
         requireIOThread();
         std::unique_ptr<requests::ListenRequest> theReq(aListenRequest);
 
-        auto [listeningPipe, errCode] = [&, this]() -> std::tuple<detail::UVPipe*, int> {
-            detail::UVPipe* listeningPipe = detail::UVPipe::init(nextDescriptor(), mRunningLoop, false);
+        auto [listeningPipe, errCode] = [&, this]() -> std::tuple<UVPipe*, int> {
+            UVPipe* listeningPipe = UVPipe::init(nextDescriptor(), mRunningLoop, false);
             if(!listeningPipe)
                 return { nullptr, UV_ERRNO_MAX };
             if(int r = listeningPipe->bind(theReq->listenAddress.c_str()); r < 0)
                 return { listeningPipe, r };
-            if(int r = listeningPipe->listen<Piper>(); r < 0)
+            if(int r = listeningPipe->listen(); r < 0)
                 return { listeningPipe, r };
             return { listeningPipe, 0 };
         }();
@@ -209,8 +215,8 @@ namespace uvcomms4
             return;
         }
 
-        detail::UVPipe *client = detail::UVPipe::init(nextDescriptor(), mRunningLoop, false);
-        detail::UVPipe *server = detail::UVPipe::fromHandle(aServer);
+        UVPipe *client = UVPipe::init(nextDescriptor(), mRunningLoop, false);
+        UVPipe *server = UVPipe::fromHandle(aServer);
 
         if(!client)
         {
@@ -226,7 +232,7 @@ namespace uvcomms4
             client->close();
         }
 
-        if(int r = client->read_start<Piper>(); r < 0)
+        if(int r = client->read_start(); r < 0)
         {
             std::cerr << "WARNING: error reading from incoming connection: "
                 << std::error_code(-r, std::system_category()).message()
@@ -242,12 +248,14 @@ namespace uvcomms4
     //================================================================================================================
     void Piper::onRead(uv_stream_t *aStream, ssize_t aNread, const uv_buf_t *aBuf)
     {
+        requireIOThread();
         std::cout << "Read " << aNread << " bytes\n";
         std::free(aBuf->base);
     }
 
     void Piper::onAlloc(uv_handle_t *aHandle, size_t aSuggested_size, uv_buf_t *aBuf)
     {
+        requireIOThread();
         aBuf->base = (char*)std::malloc(65536);
         aBuf->len = 65536;
     }

@@ -76,7 +76,7 @@ namespace uvcomms4
          *  in this case, the loop will be stopped and Piper construction aborted.
          *  Piper does not issue any requests at its own volition so
          *  there will be no unexpected calls to the Delegate until our
-         *  StartupFunction initiates something.
+         *  Startup method initiates something.
         */
         virtual void Startup(Piper * aPiper) = 0;
 
@@ -89,6 +89,11 @@ namespace uvcomms4
         /** Called on the IO thread when a new connection is accepted.
         */
         virtual void onNewConnection(Descriptor aListener, Descriptor aPipe) = 0;
+
+        /** Called on the IO thread when a pipe has been closed (error/EOF/piper stopped).
+         *  Currently, this is called on Listener pipes too.
+        */
+        virtual void onPipeClosed(Descriptor aPipe, int aErrCode) = 0;
     };
 
 

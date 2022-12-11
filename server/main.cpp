@@ -76,6 +76,11 @@ public:
             "; new pipe is " << aPipe << std::endl;
     }
 
+    void onPipeClosed(uvcomms4::Descriptor aPipe, int aErrCode) override
+    {
+        std::cout << "Pipe " << aPipe << " closed; error code " << aErrCode << std::endl;
+    }
+
 private:
     uvcomms4::Piper *mServer { nullptr };
 };
