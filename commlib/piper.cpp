@@ -59,6 +59,8 @@ namespace uvcomms4
             theLoop.reset();
 
             aInitPromise.set_exception(std::current_exception());
+            
+            return;
         }
 
         aInitPromise.set_value();
