@@ -20,6 +20,7 @@ namespace uvcomms4::requests
     {
         using pointer = std::unique_ptr<RequestHandler>;
         virtual void handleListenRequest(ListenRequest *) = 0;
+        virtual void handleConnectRequest(ConnectRequest *) = 0;
     };
 
 
@@ -34,8 +35,11 @@ namespace uvcomms4::requests
     };
 
 
+//====================================================================================================
+// ListenRequest
+//====================================================================================================
 
-    struct ListenRequest : Request
+    struct ListenRequest: Request
     {
         using retval_t = std::tuple<Descriptor, int>;
 
@@ -59,14 +63,8 @@ namespace uvcomms4::requests
     };
 
 
-
-
-//====================================================================================================
-// ListenRequest implementation
-//====================================================================================================
-
     template<typename callback_t>
-    struct ListenRequestImpl : ListenRequest
+    struct ListenRequestImpl: ListenRequest
     {
         template<std::invocable<ListenRequest::retval_t> fun_t>
         ListenRequestImpl(std::string const & aListenAddress, fun_t && aCallback) :
@@ -76,7 +74,6 @@ namespace uvcomms4::requests
 
         void fulfill(retval_t aRetval) override
         {
-            //policy_t::fulfill(aDescriptor);
             mCallback(aRetval);
         }
 
@@ -100,7 +97,66 @@ namespace uvcomms4::requests
         };
     }
 
+//====================================================================================================
+// ConnectRequest
+//====================================================================================================
+
+    struct ConnectRequest: Request
+    {
+        using retval_t = std::tuple<Descriptor, int>;
+
+        std::string connectAddress;
+        uv_connect_t uv_connect_req {};
+
+        ConnectRequest(std::string const &aConnectAddress) :
+            connectAddress(aConnectAddress)
+        {
+            uv_connect_req.data = this;
+        }
+
+        static ConnectRequest* fromUVReq(uv_connect_t *aReq)
+        {
+            return static_cast<ConnectRequest*>(aReq->data);
+        }
+
+        void dispatchToHandler(RequestHandler *aHandler) override
+        {
+            aHandler->handleConnectRequest(this);
+        }
+
+        virtual void fulfill(retval_t) = 0;
+
+        void abort() override
+        {
+            fulfill( {0, UV_ECANCELED} );
+        }
+    };
 
 
+    template<typename callback_t>
+    struct ConnectRequestImpl: ConnectRequest
+    {
+        template<std::invocable<ConnectRequest::retval_t> fun_t>
+        ConnectRequestImpl(std::string const &aConnectAddress, fun_t &&aCallback):
+            ConnectRequest(aConnectAddress),
+            mCallback(std::forward<fun_t>(aCallback))
+        {}
+
+        void fulfill(retval_t aRetval) override
+        {
+            mCallback(aRetval);
+        }
+
+        callback_t mCallback;
+    };
+
+
+    template<std::invocable<ConnectRequest::retval_t> callback_t>
+    inline std::unique_ptr<ConnectRequest>
+    makeConnectRequest(std::string const & aConnectAddress, callback_t && aCallback)
+    {
+        return std::make_unique< ConnectRequestImpl<std::decay_t<callback_t>>>
+            (aConnectAddress, std::forward<callback_t>(aCallback));
+    }
 
 }

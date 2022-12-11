@@ -72,7 +72,7 @@ public:
 
     void onNewConnection(uvcomms4::Descriptor aListener, uvcomms4::Descriptor aPipe) override
     {
-        std::cout << "Accepted new connection on listener" << aListener <<
+        std::cout << "Accepted new connection on listener " << aListener <<
             "; new pipe is " << aPipe << std::endl;
     }
 
@@ -119,6 +119,7 @@ int main(int, char*[])
 
         auto [desc, errcode] = server.listen(pipename.c_str()).get();
         std::cout << "Listen result " << errcode << std::endl;
+        //server.listen(pipename.c_str(), [](std::tuple<uvcomms4::Descriptor, int>){});
 
         std::cout << "Hit Enter to stop...\n";
         std::string s;

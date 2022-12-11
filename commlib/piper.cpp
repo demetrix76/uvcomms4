@@ -171,9 +171,9 @@ namespace uvcomms4
         mDelegate->onPipeClosed(aPipe, aErrCode);
     }
 
-    //================================================================================================================
-    // LISTENING
-    //================================================================================================================
+//================================================================================================================
+// LISTENING
+//================================================================================================================
 
     void Piper::handleListenRequest(requests::ListenRequest * aListenRequest)
     {
@@ -201,6 +201,7 @@ namespace uvcomms4
             theReq->fulfill({listeningPipe->descriptor(), 0});
         }
     }
+
 
     void Piper::onConnection(uv_stream_t *aServer, int aStatus) // incoming connection
     {
@@ -239,13 +240,14 @@ namespace uvcomms4
                 << std::endl;
         }
 
+        // todo adopt
         mDelegate->onNewConnection(server->descriptor(), client->descriptor());
     }
 
 
-    //================================================================================================================
-    // READING
-    //================================================================================================================
+//================================================================================================================
+// READING
+//================================================================================================================
     void Piper::onRead(uv_stream_t *aStream, ssize_t aNread, const uv_buf_t *aBuf)
     {
         requireIOThread();
@@ -299,5 +301,57 @@ namespace uvcomms4
 
         aBuf->base = ReadBuffer::memalloc(to_allocate);
         aBuf->len = aBuf->base ? to_allocate : 0;
+    }
+
+
+//================================================================================================================
+// CONNECTING
+//================================================================================================================
+
+    void Piper::handleConnectRequest(requests::ConnectRequest *aConnectRequest)
+    {
+        requireIOThread();
+        std::unique_ptr<requests::ConnectRequest> theReq(aConnectRequest);
+
+        UVPipe *connectedPipe = UVPipe::init(nextDescriptor(), mRunningLoop, false);
+        if(!connectedPipe)
+        {
+            theReq->fulfill({0, UV_ERRNO_MAX});
+            return;
+        }
+
+        uv_pipe_connect(&theReq->uv_connect_req, *connectedPipe,
+            theReq->connectAddress.c_str(),
+            &detail::cb<Piper>::connect);
+
+        theReq.release();
+    }
+
+    void Piper::onConnect(uv_connect_t *aReq, int aStatus) // outgoing connection
+    {
+        requireIOThread();
+
+        std::unique_ptr<requests::ConnectRequest> theReq(requests::ConnectRequest::fromUVReq(aReq));
+        UVPipe *connectedPipe = UVPipe::fromHandle(aReq->handle);
+
+        if(aStatus < 0)
+        {
+            theReq->fulfill({0, aStatus});
+            connectedPipe->close();
+            return;
+        }
+        else
+        {
+            if(int r = connectedPipe->read_start(); r < 0)
+            {
+                theReq->fulfill({0, r});
+                connectedPipe->close();
+            }
+
+            // todo adopt
+            theReq->fulfill({connectedPipe->descriptor(), 0});
+        }
+
+
     }
 }

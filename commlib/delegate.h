@@ -92,6 +92,8 @@ namespace uvcomms4
 
         /** Called on the IO thread when a pipe has been closed (error/EOF/piper stopped).
          *  Currently, this is called on Listener pipes too.
+         *  May be called for descriptors not known to the delegate if the pipe had been created
+         *  but the subsequent connection request failed.
         */
         virtual void onPipeClosed(Descriptor aPipe, int aErrCode) = 0;
 

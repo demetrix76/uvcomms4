@@ -28,10 +28,34 @@ public:
     Piper(Piper const &) = delete;
     Piper & operator = (Piper const &) = delete;
 
-    std::future<std::tuple<Descriptor, int>> listen(std::string const & aListenAddress);
+    /** Creates a new socket/pipe, binds it to the specified address and starts listening
+     *  for incoming connection on it.
+     *  Returns (via future<>) the descriptor + error code of the listening pipe.
+     *  It is highly discouraged to call this variant from the IO thread (will deadlock)
+    */
+    std::future<std::tuple<Descriptor, int>> listen(std::string const &aListenAddress);
 
-    template<std::invocable<Descriptor> callback_t>
+    /** Creates a new socket/pipe, binds it to the specified address and starts listening
+     *  for incoming connection on it.
+     *  'Returns' (via the supplied callback) the descriptor + error code of the listening pipe.
+     *  This callback will be called on the IO thread
+    */
+    template<std::invocable<std::tuple<Descriptor, int>> callback_t>
     void listen(std::string const & aListenAddress, callback_t && aCallback);
+
+    /** Creates a new socket/pipe and attempts to connect to a remote address.
+     *  Returns (via future<>) the descriptor + error code of the listening pipe.
+     *  It is highly discouraged to call this variant from the IO thread (will deadlock)
+    */
+    std::future<std::tuple<Descriptor, int>> connect(std::string const &aConnectAddress);
+
+    /** Creates a new socket/pipe and attempts to connect to a remote address.
+     *  'Returns' (via the supplied callback) the descriptor + error code of the listening pipe.
+     *  This callback will be called on the IO thread
+    */
+    template<std::invocable<std::tuple<Descriptor, int>> callback_t>
+    void connect(std::string const & aConnectAddress, callback_t && aCallback);
+
 
 private:
     void threadFunction(std::promise<void> aInitPromise);
@@ -47,6 +71,8 @@ private:
 
     void onClosed(Descriptor aPipe, int aErrCode); // pipe closed
 
+    void onConnect(uv_connect_t* aReq, int aStatus); // outgoing connection completed
+
     void requireIOThread();
     void requireNonIOThread();
 
@@ -59,6 +85,8 @@ private:
     void processPendingRequests(bool aAbort);
 
     void handleListenRequest(requests::ListenRequest *) override;
+
+    void handleConnectRequest(requests::ConnectRequest *) override;
 
 private:
     PiperDelegate::pointer  mDelegate { nullptr };
@@ -82,11 +110,6 @@ private:
 // IMPLEMENTATION
 //============================================================================================
 
-/** Creates a new socket/pipe, binds it to the specified address and starts listening
- *  for incoming connection on it.
- *  Returns (via future<>) the descriptor of the listening pipe.
- *  It is highly discouraged to call this variant from the IO thread (will deadlock)
-*/
 inline std::future<std::tuple<Descriptor, int>> Piper::listen(std::string const & aListenAddress)
 {
     requireNonIOThread();
@@ -101,17 +124,38 @@ inline std::future<std::tuple<Descriptor, int>> Piper::listen(std::string const 
     return ret_future;
 }
 
-/** Creates a new socket/pipe, binds it to the specified address and starts listening
- *  for incoming connection on it.
- *  'Returns' (via the supplied callback) the descriptor of the listening pipe.
- *  This callback will be called on the IO thread
-*/
-template <std::invocable<Descriptor> callback_t>
+
+template <std::invocable<std::tuple<Descriptor, int>> callback_t>
 inline void Piper::listen(std::string const &aListenAddress, callback_t &&aCallback)
 {
     postRequest(
         requests::makeListenRequest(aListenAddress, std::forward<callback_t>(aCallback))
     );
 }
+
+
+inline std::future<std::tuple<Descriptor, int>> Piper::connect(std::string const &aConnectAddress)
+{
+    requireNonIOThread();
+
+    std::promise<std::tuple<Descriptor, int>> thePromise;
+    auto ret_future = thePromise.get_future();
+
+    postRequest(
+        requests::makeConnectRequest(aConnectAddress, requests::promisingCallback(std::move(thePromise)))
+    );
+
+    return ret_future;
+}
+
+
+template <std::invocable<std::tuple<Descriptor, int>> callback_t>
+inline void Piper::connect(std::string const &aConnectAddress, callback_t &&aCallback)
+{
+    postRequest(
+        requests::makeConnectRequest(aConnectAddress, std::forward<callback_t>(aCallback))
+    );
+}
+
 
 }

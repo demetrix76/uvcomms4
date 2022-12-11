@@ -127,6 +127,11 @@ namespace uvcomms4::detail
             return static_cast<owner_t*>(aHandle->loop->data)->onAlloc(aHandle, aSuggested_size, aBuf);
         }
 
+        static void connect(uv_connect_t* aReq, int aStatus)
+        {
+            return static_cast<owner_t*>(aReq->handle->loop->data)->onConnect(aReq, aStatus);
+        }
+
     };
 
 
