@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 project(sockuv4)
 
+option(UVCOMMS_THREAD_CHECKS "Verify that certain functions are called on the thread they are supposed to" NO)
+
 # going the Linux way for now
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(UV REQUIRED IMPORTED_TARGET libuv>=1.44)

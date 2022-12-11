@@ -10,10 +10,10 @@ namespace uvcomms4
     namespace {
         using namespace std::literals;
 
-        config get_default_config()
+        Config get_default_config()
         {
             /* need to make sure the socket path length does not exceed sockaddr_un limits (around 108 characters) */
-            return config{
+            return Config{
                 .socket_directory = "/run/user/"s + std::to_string(getuid()) + "/com.myself.uvcomms4"s,
                 .lock_file_name = "uvcomms4.lock",
                 .socket_file_name = "uvcomms4.socket"
@@ -21,14 +21,14 @@ namespace uvcomms4
         }
     }
 
-    config const & config::get_default()
+    Config const & Config::get_default()
     {
-        static const config def_config { get_default_config() };
+        static const Config def_config { get_default_config() };
         return def_config;
     }
 
 
-    int ensure_socket_directory_exists(config const & aConfig)
+    int ensure_socket_directory_exists(Config const & aConfig)
     {
         int r;
         do {
@@ -48,11 +48,11 @@ namespace uvcomms4
         by ourselves and already have the right permissions
         */
 
-        return 0;        
+        return 0;
     }
 
 
-    int delete_socket_file(config const & aConfig)
+    int delete_socket_file(Config const & aConfig)
     {
         int r;
         std::string fpath = pipe_name(aConfig);
@@ -66,7 +66,7 @@ namespace uvcomms4
         return succeeded ? 0 : errno;
     }
 
-    std::string pipe_name(config const & aConfig)
+    std::string pipe_name(Config const & aConfig)
     {
         std::string result = aConfig.socket_directory + "/" + aConfig.socket_file_name;
         assert(result.size() < sizeof(sockaddr_un::sun_path));

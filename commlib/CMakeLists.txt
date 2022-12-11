@@ -3,16 +3,14 @@ set(TARGET_NAME commlib)
 set(SOURCES
     commlib.h
     commlib.cpp
-    uvx.h
-    Streamer.h
     pack.h
-    uvrequest.h
     collector.h
-    server.h
-    server.cpp
-    client.h
-    client.cpp
     delegate.h
+    piper.h
+    piper.cpp
+    wrappers.h
+    final_act.h
+    request.h
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)
@@ -25,3 +23,7 @@ target_link_libraries(${TARGET_NAME} PUBLIC UV::UV)
 target_include_directories(${TARGET_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
 )
+
+if(UVCOMMS_THREAD_CHECKS)
+    target_compile_definitions(${TARGET_NAME} PUBLIC UVCOMMS_THREAD_CHECKS)
+endif()
