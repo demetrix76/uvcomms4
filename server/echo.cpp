@@ -50,7 +50,7 @@ void echo_run()
 {
     std::cout << "Running echo server...\n";
 
-    config const &cfg = config::get_default();
+    Config const &cfg = Config::get_default();
     ensure_socket_directory_exists(cfg);
     delete_socket_file(cfg);
 

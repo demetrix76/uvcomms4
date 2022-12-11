@@ -48,7 +48,7 @@ int main(int, char*[])
 
     std::cout << "Hi, client here\n";
 
-    uvcomms4::config const & cfg = uvcomms4::config::get_default();
+    uvcomms4::Config const & cfg = uvcomms4::Config::get_default();
     std::string pipename = uvcomms4::pipe_name(cfg);
 
 

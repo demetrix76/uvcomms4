@@ -27,7 +27,7 @@ public:
     void Startup(Piper * aPiper) override
     {
         mClient = aPiper;
-        std::string pname = pipe_name(config::get_default());
+        std::string pname = pipe_name(Config::get_default());
         aPiper->connect(pname, [this](auto result){
             auto [descriptor, status] = result;
             if(0 == status)

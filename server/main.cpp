@@ -59,7 +59,7 @@ int main(int, char*[])
     using namespace std::literals;
     std::cout << "Hi there\n";
 
-    uvcomms4::config const & cfg = uvcomms4::config::get_default();
+    uvcomms4::Config const & cfg = uvcomms4::Config::get_default();
     uvcomms4::ensure_socket_directory_exists(cfg);
     uvcomms4::delete_socket_file(cfg);
 
