@@ -38,7 +38,7 @@ public:
         std::cout << "Pipe " << aPipe << " closed; error code " << aErrCode << std::endl;
     }
 
-    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector)
+    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector) override
     {
         auto [status, message] = aCollector.getMessage<std::string>();
         if(status == uvcomms4::CollectorStatus::HasMessage)

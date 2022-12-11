@@ -15,6 +15,8 @@ set(SOURCES
 
 if(CMAKE_SYSTEM_NAME MATCHES Linux)
     list(APPEND SOURCES commlib_lin.cpp)
+elseif(CMAKE_SYSTEM_NAME MATCHES Darwin)
+    list(APPEND SOURCES commlib_mac.cpp)
 endif()
 
 add_library(${TARGET_NAME} STATIC ${SOURCES})
