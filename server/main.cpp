@@ -81,6 +81,13 @@ public:
         std::cout << "Pipe " << aPipe << " closed; error code " << aErrCode << std::endl;
     }
 
+    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector)
+    {
+        auto [status, message] = aCollector.getMessage<std::string>();
+        if(status == uvcomms4::CollectorStatus::HasMessage)
+            std::cout << "MESSAGE: " << message << std::endl;
+    }
+
 private:
     uvcomms4::Piper *mServer { nullptr };
 };

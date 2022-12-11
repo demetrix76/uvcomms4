@@ -94,6 +94,12 @@ namespace uvcomms4
          *  Currently, this is called on Listener pipes too.
         */
         virtual void onPipeClosed(Descriptor aPipe, int aErrCode) = 0;
+
+        /** Called when a new complete incoming message becomes available.
+         *  Called on the IO thread and the supplied Collector must only be accessed from the IO thread;
+         *  Extract the message before moving to another thread.
+         */
+        virtual void onMessage(Descriptor aDescriptor, Collector & aCollector) = 0;
     };
 
 

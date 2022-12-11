@@ -11,6 +11,7 @@
 #include <ostream>
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 
 namespace uvcomms4
 {
@@ -132,7 +133,7 @@ public:
 // apparently, this only means that the real buffer size is twice as big as requested; no need to divide it here
 #endif
 // we probably don't need big buffers as our messages will not be huge
-        bfsize = std::min(bfsize, 64 * 1024);
+        bfsize = std::min(std::abs(bfsize), 64 * 1024);
         mRecvBufferSize = bfsize;
 #endif
         return r;

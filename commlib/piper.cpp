@@ -250,13 +250,54 @@ namespace uvcomms4
     {
         requireIOThread();
         std::cout << "Read " << aNread << " bytes\n";
-        std::free(aBuf->base);
+        //std::free(aBuf->base);
+        UVPipe *thePipe = UVPipe::fromHandle(aStream);
+
+        if(aNread == UV_EOF)
+        {
+            ReadBuffer::memfree(aBuf->base);
+
+            // this callback does not add new data so there's no need to check the Collector for complete messages
+            // but we might want to know if there's an incomplete message?
+            if(thePipe->collector().contains(1))
+                std::cerr << "WARNING: end of stream reached but there's a (possibly) icomplete message in the read buffer!\n";
+
+            thePipe->close(0);
+            // immediately delete the pipe from the descriptor table?
+        }
+        else if(aNread < 0)
+        {
+            ReadBuffer::memfree(aBuf->base);
+            thePipe->close((int)aNread);
+            // immediately delete the pipe from the descriptor table?
+        }
+        else
+        {
+            // N.B. zero length reads are possible, avoid adding such buffers
+            // zero-length messages are allowed but they will have at least 8 bytes of header
+            Collector & collector = thePipe->collector();
+
+            if(aNread > 0)
+                collector.append(ReadBuffer{aBuf->base, (std::size_t)aNread});
+
+            while(collector.status() == CollectorStatus::HasMessage)
+               mDelegate->onMessage(thePipe->descriptor(), collector);
+
+            if(collector.status() == CollectorStatus::Corrupt)
+                thePipe->close(UV_ECONNABORTED);
+            }
+
     }
 
     void Piper::onAlloc(uv_handle_t *aHandle, size_t aSuggested_size, uv_buf_t *aBuf)
     {
         requireIOThread();
-        aBuf->base = (char*)std::malloc(65536);
-        aBuf->len = 65536;
+        UVPipe *thePipe = UVPipe::fromHandle(aHandle);
+        std::size_t to_allocate = thePipe->recvBuferSize();
+        if(to_allocate == 0)
+            to_allocate = aSuggested_size;
+
+        aBuf->base = ReadBuffer::memalloc(to_allocate);
+        aBuf->len = aBuf->base ? to_allocate : 0;
     }
 }

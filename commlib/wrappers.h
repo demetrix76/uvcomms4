@@ -1,6 +1,7 @@
 #pragma once
 
 #include "commlib.h"
+#include "collector.h"
 #include <uv.h>
 #include <system_error>
 #include <iostream>
@@ -159,12 +160,18 @@ namespace uvcomms4::detail
             return npipe;
         }
 
-        static UVPipeT* fromHandle(uv_pipe_t * aHandle)
+        std::size_t recvBuferSize() const noexcept
         {
-            return static_cast<UVPipeT*>(static_cast<BaseHandle*>(aHandle->data));
+            return mRecvBufferSize;
         }
 
-        static UVPipeT* fromHandle(uv_stream_t * aHandle)
+        Collector& collector()
+        {
+            return mCollector;
+        }
+
+        template<isUVHandleType handle_t>
+        static UVPipeT* fromHandle(handle_t * aHandle)
         {
             return static_cast<UVPipeT*>(static_cast<BaseHandle*>(aHandle->data));
         }
@@ -182,6 +189,13 @@ namespace uvcomms4::detail
 
         int read_start()
         {
+#if defined(__APPLE__) || defined(__unix__)
+        int bfsize = 0;
+        uv_recv_buffer_size(reinterpret_cast<uv_handle_t*>(&mPipe), &bfsize);
+// we probably don't need big buffers as our messages will not be huge
+        bfsize = std::min(bfsize, 64 * 1024);
+        mRecvBufferSize = bfsize;
+#endif
             return uv_read_start(*this, &cb<owner_t>::alloc, &cb<owner_t>::read);
         }
 
@@ -195,9 +209,11 @@ namespace uvcomms4::detail
             uv_close(*this, &BaseHandle::close_cb);
         }
 
-        uv_pipe_t mPipe {};
+        uv_pipe_t   mPipe {};
         Descriptor  mDescriptor;
-        bool      mIsListener { false };
+        bool        mIsListener { false };
+        int         mRecvBufferSize { 0 };
+        Collector   mCollector;
     };
 
 
