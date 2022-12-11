@@ -3,7 +3,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/resource.h>
 #include <cassert>
+#include <iostream>
 
 namespace uvcomms4
 {
@@ -71,6 +73,16 @@ namespace uvcomms4
         std::string result = aConfig.socket_directory + "/" + aConfig.socket_file_name;
         assert(result.size() < sizeof(sockaddr_un::sun_path));
         return result;
+    }
+
+
+    void adjust_resource_limits()
+    {
+        rlimit rlp {};
+        if(getrlimit(RLIMIT_NOFILE, &rlp) < 0)
+            return;
+        rlp.rlim_cur = 2048;
+        setrlimit(RLIMIT_NOFILE, &rlp);
     }
 
 }

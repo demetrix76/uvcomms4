@@ -117,6 +117,7 @@ private:
 
 void run_echo_client()
 {
+    adjust_resource_limits();
     constexpr std::size_t client_count = 100;
 
     std::list<std::promise<void>> completionPromises;

@@ -38,4 +38,10 @@ int delete_socket_file(Config const &);
 */
 std::string pipe_name(Config const &);
 
+/** Only makes sense on UNIX: raises the maximum number of file descriptors
+ * (on macOS this seems to be set to 256 per process by default);
+ * Required for the stress test
+*/
+void adjust_resource_limits();
+
 }
