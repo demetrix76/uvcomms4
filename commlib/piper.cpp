@@ -168,7 +168,32 @@ namespace uvcomms4
     void Piper::onClosed(Descriptor aPipe, int aErrCode)
     {
         requireIOThread();
+        pipeUnregister(aPipe);
         mDelegate->onPipeClosed(aPipe, aErrCode);
+    }
+
+    void Piper::pipeRegister(UVPipe *aPipe)
+    {
+        requireIOThread();
+        auto found = mPipes.find(aPipe->descriptor());
+        assert(found == mPipes.end()); // this would be Piper logic error
+        mPipes.insert({ aPipe->descriptor(), aPipe });
+    }
+
+    void Piper::pipeUnregister(Descriptor aDescriptor)
+    {
+        requireIOThread();
+        auto found = mPipes.find(aDescriptor);
+        if(found != mPipes.end())
+            mPipes.erase(found);
+    }
+
+    Piper::UVPipe *Piper::pipeGet(Descriptor aDescriptor)
+    {
+        requireIOThread();
+        auto found = mPipes.find(aDescriptor);
+        return found == mPipes.end() ?
+            nullptr : found->second;
     }
 
 //================================================================================================================
@@ -198,7 +223,13 @@ namespace uvcomms4
         }
         else
         {
+            // NOTE this triggers ThreadSanitizer:
+            // either there exists a data race in libstdc++ std::promise/future,
+            // or this is a false positive
+            // TODO verify with clang/libc++
             theReq->fulfill({listeningPipe->descriptor(), 0});
+            // the problem doesn't happen if we don't free the listenRequest
+            // (which contains the lambda which contains the promise)
         }
     }
 
@@ -240,7 +271,8 @@ namespace uvcomms4
                 << std::endl;
         }
 
-        // todo adopt
+        pipeRegister(client);
+
         mDelegate->onNewConnection(server->descriptor(), client->descriptor());
     }
 
@@ -327,6 +359,7 @@ namespace uvcomms4
         theReq.release();
     }
 
+
     void Piper::onConnect(uv_connect_t *aReq, int aStatus) // outgoing connection
     {
         requireIOThread();
@@ -348,10 +381,54 @@ namespace uvcomms4
                 connectedPipe->close();
             }
 
-            // todo adopt
+            pipeRegister(connectedPipe);
+
             theReq->fulfill({connectedPipe->descriptor(), 0});
         }
-
-
     }
+
+//================================================================================================================
+// WRITING
+//================================================================================================================
+
+    void Piper::handleWriteRequest(requests::WriteRequest * aReq)
+    {
+        requireIOThread();
+        std::unique_ptr<requests::WriteRequest> theReq(aReq);
+
+        auto found_pipe = mPipes.find(aReq->pipeDescriptor);
+        if(found_pipe == mPipes.end())
+        { // the pipe is gone or has never existed
+            theReq->fulfill(ENOTCONN);
+            return;
+        }
+
+        UVPipe *thePipe = found_pipe->second;
+
+        uv_buf_t buffers[] {
+            uv_buf_init(theReq->header, sizeof(theReq->header)),
+            uv_buf_init(const_cast<char*>(theReq->data()), static_cast<unsigned>(theReq->size()))
+        };
+
+        std::cout << "theReq header size " << sizeof(theReq->header) << std::endl;
+
+        int r = uv_write(&theReq->uv_write_request, *thePipe,
+            buffers, std::size(buffers), &detail::cb<Piper>::write);
+
+        if(0 == r)
+            theReq.release();
+        else
+            theReq->fulfill(r);
+    }
+
+    void Piper::onWrite(uv_write_t *aReq, int aStatus)
+    {
+        requireIOThread();
+        std::unique_ptr<requests::WriteRequest> theReq(
+            static_cast<requests::WriteRequest*>(aReq->data)
+        );
+
+        theReq->fulfill(aStatus);
+    }
+
 }

@@ -2,6 +2,7 @@
 
 #include <commlib/client.h>
 #include <commlib/piper.h>
+#include <string>
 
 class SampleClientDelegate: public uvcomms4::ClientDelegate
 {
@@ -100,14 +101,20 @@ int main(int, char*[])
 
     uvcomms4::Piper client(std::make_shared<PiperClientDelegate>());
 
-    client.connect(pipename, [](auto const & result){
-        auto [descriptor, code] = result;
-        std::cout << "Connect result " << code << std::endl;
-    });
+    // client.connect(pipename, [](auto const & result){
+    //     auto [descriptor, code] = result;
+    //     std::cout << "Connect result " << code << std::endl;
+    // });
 
-    // auto [descriptor, status] = client.connect(pipename).get();
+    auto [descriptor, status] = client.connect(pipename).get();
 
-    // std::cout << "Connect result: " << status << std::endl;
+    std::cout << "Connect result: " << status << std::endl;
+
+    if(0 == status)
+    {
+        auto wrstatus = client.write(descriptor, "Some message to write"s).get();
+        std::cout << "Write result " << wrstatus << std::endl;
+    }
 
     // uvcomms4::Client client(cfg, std::make_shared<SampleClientDelegate>());
 

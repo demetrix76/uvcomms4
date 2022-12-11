@@ -132,6 +132,11 @@ namespace uvcomms4::detail
             return static_cast<owner_t*>(aReq->handle->loop->data)->onConnect(aReq, aStatus);
         }
 
+        static void write(uv_write_t* aReq, int aStatus)
+        {
+            return static_cast<owner_t*>(aReq->handle->loop->data)->onWrite(aReq, aStatus);
+        }
+
     };
 
 
@@ -170,29 +175,29 @@ namespace uvcomms4::detail
             return mRecvBufferSize;
         }
 
-        Collector& collector()
+        Collector& collector() noexcept
         {
             return mCollector;
         }
 
         template<isUVHandleType handle_t>
-        static UVPipeT* fromHandle(handle_t * aHandle)
+        static UVPipeT* fromHandle(handle_t * aHandle) noexcept
         {
             return static_cast<UVPipeT*>(static_cast<BaseHandle*>(aHandle->data));
         }
 
-        int bind(char const *aName)
+        int bind(char const *aName) noexcept
         {
             return uv_pipe_bind(*this, aName);
         }
 
-        int listen()
+        int listen() noexcept
         {
             mIsListener = true;
             return uv_listen(*this, 128, &cb<owner_t>::connection);
         }
 
-        int read_start()
+        int read_start() noexcept
         {
 #if defined(__APPLE__) || defined(__unix__)
         int bfsize = 0;
@@ -208,7 +213,7 @@ namespace uvcomms4::detail
         operator uv_stream_t* () noexcept { return reinterpret_cast<uv_stream_t*>(&mPipe); }
         operator uv_handle_t* () noexcept { return reinterpret_cast<uv_handle_t*>(&mPipe); }
 
-        void close(int aCloseCode = 0)
+        void close(int aCloseCode = 0) noexcept
         {
             mCloseCode = aCloseCode;
             uv_close(*this, &BaseHandle::close_cb);
