@@ -3,15 +3,8 @@ set(TARGET_NAME commlib)
 set(SOURCES
     commlib.h
     commlib.cpp
-    uvx.h
-    Streamer.h
     pack.h
-    uvrequest.h
     collector.h
-    server.h
-    server.cpp
-    client.h
-    client.cpp
     delegate.h
     piper.h
     piper.cpp
