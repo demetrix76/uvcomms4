@@ -283,8 +283,6 @@ namespace uvcomms4
     void Piper::onRead(uv_stream_t *aStream, ssize_t aNread, const uv_buf_t *aBuf)
     {
         requireIOThread();
-        std::cout << "Read " << aNread << " bytes\n";
-        //std::free(aBuf->base);
         UVPipe *thePipe = UVPipe::fromHandle(aStream);
 
         if(aNread == UV_EOF)
@@ -409,8 +407,6 @@ namespace uvcomms4
             uv_buf_init(theReq->header, sizeof(theReq->header)),
             uv_buf_init(const_cast<char*>(theReq->data()), static_cast<unsigned>(theReq->size()))
         };
-
-        std::cout << "theReq header size " << sizeof(theReq->header) << std::endl;
 
         int r = uv_write(&theReq->uv_write_request, *thePipe,
             buffers, std::size(buffers), &detail::cb<Piper>::write);

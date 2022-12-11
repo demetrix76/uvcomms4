@@ -1,7 +1,5 @@
 #include <iostream>
 
-#include <commlib/server.h>
-#include <commlib/delegate.h>
 #include <commlib/piper.h>
 #include <vector>
 #include <memory>
@@ -13,47 +11,6 @@
 
 #include <type_traits>
 
-
-class SampleServerDelegate: public uvcomms4::ServerDelegate
-{
-public:
-    void onStartup(uvcomms4::Server *aServer) override
-    {
-        // reminder: Constructor thread
-        mServer = aServer;
-        std::cout << "[SampleServer] Startup\n";
-    }
-
-    void onShutdown() override
-    {
-        // reminder: Destructor thread
-        std::cout << "[SampleServer] Shutdown\n";
-    }
-
-    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector) override
-    {
-        // reminder: IO thread
-        // we MUST extract the message here; otherwise, we'll have an infinite loop
-        auto [status, message] = aCollector.getMessage<std::string>();
-        if(status == uvcomms4::CollectorStatus::HasMessage)
-            std::cout << "[SampleServer] MESSAGE: " << message << std::endl;
-    }
-
-    void onNewPipe(uvcomms4::Descriptor aDescriptor) override
-    {
-        // reminder: IO thread
-        std::cout << "[SampleServer] New pipe: " << aDescriptor << std::endl;
-    }
-
-    void onPipeClosed(uvcomms4::Descriptor aDescriptor, int aErrorCode) override
-    {
-        // reminder: IO thread
-        std::cout << "[SampleServer] Pipe closed: " << aDescriptor << "; error code " << aErrorCode << std::endl;
-    }
-
-private:
-    uvcomms4::Server       *mServer { nullptr };
-};
 
 void echo_run();
 
@@ -96,8 +53,8 @@ private:
 int main(int, char*[])
 {
     signal(SIGPIPE, SIG_IGN);
-    //echo_run();
-    // return 0;
+    echo_run();
+    return 0;
 
     using namespace std::literals;
     std::cout << "Hi there\n";
@@ -110,12 +67,8 @@ int main(int, char*[])
 
     try
     {
-        //uvcomms4::Server server(uvcomms4::config::get_default(), std::make_shared<SampleServerDelegate>());
         uvcomms4::Piper server(std::make_shared<PiperServerDelegate>());
 
-        // server.listen("/aaa/nnn", [](uvcomms4::Descriptor desc){
-        //     std::cout << "Listen result " << desc << std::endl;
-        // });
 
         auto [desc, errcode] = server.listen(pipename.c_str()).get();
         std::cout << "Listen result " << errcode << std::endl;

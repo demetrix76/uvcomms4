@@ -1,62 +1,64 @@
 
-#include <commlib/server.h>
+#include <commlib/piper.h>
 #include <commlib/commlib.h>
 #include <iostream>
 
 using namespace uvcomms4;
 
-
-class EchoServerDelegate: public ServerDelegate
+class EchoServerDelegate: public PiperDelegate
 {
 public:
-
-    void onStartup(Server *aServer) override
-    {
-        // reminder: Constructor thread
-        mServer = aServer;
-        std::cout << "[EchoServer] Startup\n";
-    }
-
-    void onShutdown() override
-    {
-        // reminder: Destructor thread
-        std::cout << "[EchoServer] Shutdown\n";
-    }
-
-    void onMessage(Descriptor aDescriptor, Collector & aCollector) override
-    {
-        // reminder: IO thread
-        // we MUST extract the message here; otherwise, we'll have an infinite loop
-        auto [status, message] = aCollector.getMessage<std::string>();
-        if(status == CollectorStatus::HasMessage)
+        void Startup(Piper * aPiper) override
         {
-            mServer->send(aDescriptor, std::move(message), [](auto){});
+            mServer = aPiper;
+            std::cout << "[EchoServer] Startup\n";
         }
-    }
 
-    void onNewPipe(Descriptor aDescriptor) override
-    {
-        // reminder: IO thread
-    }
+        void Shutdown() noexcept override
+        {
+            std::cout << "[EchoServer] Shutdown\n";
+        }
 
-    void onPipeClosed(Descriptor aDescriptor, int aErrorCode) override
-    {
-        // reminder: IO thread
-        if(aErrorCode)
-            std::cerr << "Pipe error: " << aErrorCode << std::endl;
-    }
+        void onNewConnection(Descriptor aListener, Descriptor aPipe) override
+        {
+
+        }
+
+        void onPipeClosed(Descriptor aPipe, int aErrCode) override
+        {
+            if(aErrCode)
+                std::cerr << "Pipe error: " << aErrCode << std::endl;
+        }
+
+        void onMessage(Descriptor aDescriptor, Collector & aCollector) override
+        {
+            // reminder: IO thread
+            // we MUST extract the message here; otherwise, we'll have an infinite loop
+            auto [status, message] = aCollector.getMessage<std::string>();
+            if(status == CollectorStatus::HasMessage)
+            {
+                mServer->write(aDescriptor, std::move(message), [](auto){});
+            }
+        }
 
 private:
-    Server       *mServer { nullptr };
+    Piper   *mServer { nullptr };
 };
-
 
 
 void echo_run()
 {
     std::cout << "Running echo server...\n";
 
-    Server server(config::get_default(), std::make_shared<EchoServerDelegate>());
+    config const &cfg = config::get_default();
+    ensure_socket_directory_exists(cfg);
+    delete_socket_file(cfg);
+
+    Piper server(std::make_shared<EchoServerDelegate>());
+
+    auto [listener, errCode] = server.listen(pipe_name(cfg)).get();
+
+    std::cout << "Listen result " << errCode << std::endl;
 
     std::cout << "Hit Enter to stop\n";
     std::string s;
