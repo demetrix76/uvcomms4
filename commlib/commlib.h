@@ -44,4 +44,9 @@ std::string pipe_name(Config const &);
 */
 void adjust_resource_limits();
 
+/** On UNIX we need to block SIGPIPE to prevent the app from closing
+* when the pipe is closed on the other side
+*/
+void configure_signals();
+
 }

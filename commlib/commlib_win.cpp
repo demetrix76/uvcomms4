@@ -43,4 +43,9 @@ namespace uvcomms4
 
     }
 
+    void configure_signals()
+    {
+
+    }
+
 }

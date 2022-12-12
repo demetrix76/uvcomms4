@@ -73,4 +73,9 @@ namespace uvcomms4
         return result;
     }
 
+    void configure_signals()
+    {
+        signal(SIGPIPE, SIG_IGN);
+    }
+
 }

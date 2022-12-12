@@ -5,7 +5,6 @@
 #include <memory>
 
 #include <cstring>
-#include <signal.h>
 
 #include <type_traits>
 
@@ -50,9 +49,7 @@ private:
 
 int main(int, char*[])
 {
-    char* leak = new char[64];
-    char c = leak[66];
-    //signal(SIGPIPE, SIG_IGN);
+    uvcomms4::configure_signals();
     echo_run();
     return 0;
 
