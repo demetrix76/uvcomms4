@@ -5,8 +5,6 @@
 #include <memory>
 
 #include <cstring>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <signal.h>
 
 #include <type_traits>
@@ -52,7 +50,9 @@ private:
 
 int main(int, char*[])
 {
-    signal(SIGPIPE, SIG_IGN);
+    char* leak = new char[64];
+    char c = leak[66];
+    //signal(SIGPIPE, SIG_IGN);
     echo_run();
     return 0;
 

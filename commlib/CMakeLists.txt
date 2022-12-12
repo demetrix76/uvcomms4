@@ -17,7 +17,11 @@ if(CMAKE_SYSTEM_NAME MATCHES Linux)
     list(APPEND SOURCES commlib_lin.cpp)
 elseif(CMAKE_SYSTEM_NAME MATCHES Darwin)
     list(APPEND SOURCES commlib_mac.cpp)
+elseif(CMAKE_SYSTEM_NAME MATCHES Windows)
+    list(APPEND SOURCES commlib_win.cpp)
 endif()
+
+source_group(TREE ${CMAKE_SOURCE_DIR} FILES ${SOURCES})
 
 add_library(${TARGET_NAME} STATIC ${SOURCES})
 
