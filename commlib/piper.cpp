@@ -17,7 +17,9 @@ namespace uvcomms4
         });
 
         final_act fin_thread{[this] { mIOThread.join(); }};
-        initFuture.get();
+        initFuture.get(); // UB sanitizer barks on this (invalid vptr etc) if we get an exception from the IO thread;
+        // however, that seems to be a false positive. Possible explanation: https://stackoverflow.com/questions/57294792/c-ubsan-produces-false-positives-with-derived-objects
+
 
         final_act fin_stop([this] { requestStop(); } );
         mDelegate->Startup(this);

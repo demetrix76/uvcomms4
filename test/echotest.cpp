@@ -17,26 +17,33 @@ std::list<std::shared_ptr<echotest::EchoClientDelegate>>
 clientWorker(std::size_t aWorkerId, std::string aPipeName, std::size_t aClientCount,
     std::size_t aConnectionsPerClient, std::size_t aMessagesPerConnection)
 {
-    std::list<std::shared_ptr<echotest::EchoClientDelegate>> delegates;
-
-    std::latch completionLatch(aClientCount);
-
-    for(std::size_t i = 0; i < aClientCount; i++)
-        delegates.emplace_back(std::make_shared<echotest::EchoClientDelegate>(aConnectionsPerClient, completionLatch));
-
+    try
     {
-        std::list<Piper> pipers;
-        for(auto delegate: delegates)
-            pipers.emplace_back(delegate);
+        std::list<std::shared_ptr<echotest::EchoClientDelegate>> delegates;
+        std::latch completionLatch(aClientCount);
 
-        for(auto delegate: delegates)
-            delegate->spinUp(aPipeName, aConnectionsPerClient, aMessagesPerConnection);
+        for(std::size_t i = 0; i < aClientCount; i++)
+            delegates.emplace_back(std::make_shared<echotest::EchoClientDelegate>(aConnectionsPerClient, completionLatch));
 
-        completionLatch.wait();
-        std::cout << "Worker " << aWorkerId << " done waiting\n";
+        {
+            std::list<Piper> pipers;
+            for(auto delegate: delegates)
+                pipers.emplace_back(delegate);
+
+            for(auto delegate: delegates)
+                delegate->spinUp(aPipeName, aConnectionsPerClient, aMessagesPerConnection);
+
+            completionLatch.wait();
+            std::cout << "Worker " << aWorkerId << " done waiting\n";
+        }
+
+        return delegates;
     }
-
-    return delegates;
+    catch(std::exception &e)
+    {
+        std::cerr << "Exception in clientWorker: " << e.what() << std::endl;
+        return {};
+    }
 }
 
 //N.B. Attaching to a process in linux requires disabling ptrace protection:
@@ -78,6 +85,7 @@ TEST(EchoTest, EchoTest1)
 
         for(auto &result: results)
         {
+            EXPECT_FALSE(result.empty());
             for(auto &delegate: result)
             {
                 delegate->assess(connections_per_client, messages_per_connection);
