@@ -46,23 +46,24 @@ public:
 
     }
 
-    void onNewConnection(Descriptor aListener, Descriptor aPipe) override
+    void onNewConnection(Descriptor aListener, Descriptor aPipe) noexcept override
     {
 
     }
 
-    void onPipeClosed(Descriptor aPipe, int aErrCode) override
+    void onPipeClosed(Descriptor aPipe, int aErrCode) noexcept override
     {
 
     }
 
-    void onMessage(Descriptor aDescriptor, Collector & aCollector) override
+    void onMessage(Descriptor aDescriptor, Collector & aCollector) noexcept override
     {
         auto [status, message] = aCollector.getMessage<std::string>();
         if(status == CollectorStatus::HasMessage)
         {
             if(!checkExpectedMessage(message))
-                throw std::runtime_error("Messages do not match");
+                std::terminate();
+                //throw std::runtime_error("Messages do not match"); // yes, this is not quite right
         }
     }
 

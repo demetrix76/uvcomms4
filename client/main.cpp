@@ -18,17 +18,17 @@ public:
 
     }
 
-    void onNewConnection(uvcomms4::Descriptor aListener, uvcomms4::Descriptor aPipe) override
+    void onNewConnection(uvcomms4::Descriptor aListener, uvcomms4::Descriptor aPipe) noexcept override
     {
         // will not happen here
     }
 
-    void onPipeClosed(uvcomms4::Descriptor aPipe, int aErrCode) override
+    void onPipeClosed(uvcomms4::Descriptor aPipe, int aErrCode) noexcept override
     {
         std::cout << "Pipe " << aPipe << " closed; error code " << aErrCode << std::endl;
     }
 
-    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector) override
+    void onMessage(uvcomms4::Descriptor aDescriptor, uvcomms4::Collector & aCollector) noexcept override
     {
         auto [status, message] = aCollector.getMessage<std::string>();
         if(status == uvcomms4::CollectorStatus::HasMessage)

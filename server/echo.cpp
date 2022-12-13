@@ -19,18 +19,18 @@ public:
             std::cout << "[EchoServer] Shutdown\n";
         }
 
-        void onNewConnection(Descriptor aListener, Descriptor aPipe) override
+        void onNewConnection(Descriptor aListener, Descriptor aPipe) noexcept override
         {
 
         }
 
-        void onPipeClosed(Descriptor aPipe, int aErrCode) override
+        void onPipeClosed(Descriptor aPipe, int aErrCode) noexcept override
         {
             if(aErrCode)
                 std::cerr << "Pipe error: " << aErrCode << std::endl;
         }
 
-        void onMessage(Descriptor aDescriptor, Collector & aCollector) override
+        void onMessage(Descriptor aDescriptor, Collector & aCollector) noexcept override
         {
             // reminder: IO thread
             // we MUST extract the message here; otherwise, we'll have an infinite loop

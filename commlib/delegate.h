@@ -33,26 +33,29 @@ namespace uvcomms4
 
         /** Called on the Destructor thread before issuing a stop request for the IO thread.
          *  Normally, doesn't need to do anything. Any listeners and other open pipes will be closed automatically.
-         *  Not allowed to throw
+         *  Not allowed to throw.
         */
         virtual void Shutdown() noexcept = 0;
 
         /** Called on the IO thread when a new connection is accepted.
+         *  Not allowed to throw.
         */
-        virtual void onNewConnection(Descriptor aListener, Descriptor aPipe) = 0;
+        virtual void onNewConnection(Descriptor aListener, Descriptor aPipe) noexcept = 0;
 
         /** Called on the IO thread when a pipe has been closed (error/EOF/piper stopped).
          *  Currently, this is called on Listener pipes too.
          *  May be called for descriptors not known to the delegate if the pipe had been created
          *  but the subsequent connection request failed.
+         *  Not allowed to throw.
         */
-        virtual void onPipeClosed(Descriptor aPipe, int aErrCode) = 0;
+        virtual void onPipeClosed(Descriptor aPipe, int aErrCode) noexcept = 0;
 
         /** Called when a new complete incoming message becomes available.
          *  Called on the IO thread and the supplied Collector must only be accessed from the IO thread;
          *  Extract the message before moving to another thread.
+         *  Not allowed to throw.
          */
-        virtual void onMessage(Descriptor aDescriptor, Collector & aCollector) = 0;
+        virtual void onMessage(Descriptor aDescriptor, Collector & aCollector) noexcept = 0;
     };
 
 
