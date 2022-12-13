@@ -70,6 +70,7 @@ int main(int, char*[])
         auto [desc, errcode] = server.listen(pipename.c_str()).get();
         std::cout << "Listen result " << errcode << std::endl;
         //server.listen(pipename.c_str(), [](std::tuple<uvcomms4::Descriptor, int>){});
+        //std::cout << server.close(1).get() << std::endl;
 
         std::cout << "Hit Enter to stop...\n";
         std::string s;

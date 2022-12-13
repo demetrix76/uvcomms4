@@ -2,11 +2,13 @@
 
 #include "commlib.h"
 #include "collector.h"
+#include "request.h"
 #include <uv.h>
 #include <system_error>
 #include <iostream>
 #include <thread>
 #include <type_traits>
+#include <memory>
 
 namespace uvcomms4::detail
 {
@@ -150,6 +152,8 @@ namespace uvcomms4::detail
         ~UVPipeT()
         {
             owner_t* owner = static_cast<owner_t*>(mPipe.loop->data);
+            if(mCloseRequest)
+                mCloseRequest->fulfill(0);
             if(owner)
             {
                 owner->onClosed(mDescriptor, mCloseCode);
@@ -218,6 +222,15 @@ namespace uvcomms4::detail
         operator uv_stream_t* () noexcept { return reinterpret_cast<uv_stream_t*>(&mPipe); }
         operator uv_handle_t* () noexcept { return reinterpret_cast<uv_handle_t*>(&mPipe); }
 
+        /// returns true if request was set; false if there was another request set
+        bool setCloseRequest(std::unique_ptr<requests::CloseRequest> &&aCloseRequest)
+        {
+            if(mCloseRequest)
+                return false;
+            mCloseRequest = std::move(aCloseRequest);
+            return true;
+        }
+
         void close(int aCloseCode = 0) noexcept
         {
             mCloseCode = aCloseCode;
@@ -229,6 +242,7 @@ namespace uvcomms4::detail
         bool        mIsListener { false };
         int         mRecvBufferSize { 0 };
         Collector   mCollector;
+        std::unique_ptr<requests::CloseRequest> mCloseRequest;
     };
 
 

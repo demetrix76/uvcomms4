@@ -451,7 +451,9 @@ namespace uvcomms4
         }
         else
         {
-            theReq->fulfill(0); // consider fulfilling when _actually_ closed?
+            // request will be fulfilled when the pipe is actually destroyed
+            if(!thePipe->setCloseRequest(std::move(theReq)))
+                theReq->fulfill(UV_ENOTSUP); // unless another request has already been issued
             thePipe->close();
         }
 
