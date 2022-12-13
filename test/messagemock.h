@@ -11,7 +11,7 @@ namespace messagemock
 
 using stream_t = std::vector<char>;
 
-void appendMessage(stream_t &aStream, std::string_view aMessage)
+inline void appendMessage(stream_t &aStream, std::string_view aMessage)
 {
     std::uint32_t msglen = static_cast<std::uint32_t>(aMessage.size());
     std::uint32_t lenhash = uvcomms4::length_hash(msglen);

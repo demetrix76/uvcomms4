@@ -2,6 +2,8 @@ set(TARGET_NAME test)
 
 set(SOURCES
     test1.cpp
+    echotest.cpp
+    echotest.h
     messagemock.h
 )
 

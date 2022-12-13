@@ -66,9 +66,9 @@ namespace uvcomms4
         aInitPromise.set_value();
 
         mRunningLoop = *theLoop;
-        std::cout << "Piper Loop running...\n";
+        //std::cout << "Piper Loop running...\n";
         uv_run(*theLoop, UV_RUN_DEFAULT);
-        std::cout << "Piper Loop done\n";
+        //std::cout << "Piper Loop done\n";
         mRunningLoop = nullptr;
 
     }
@@ -76,7 +76,6 @@ namespace uvcomms4
 
     void Piper::requestStop()
     {
-        std::cout << "requestStop\n";
         {
             std::lock_guard lk(mMx);
             mStopFlag = true;
@@ -240,7 +239,6 @@ namespace uvcomms4
     void Piper::onConnection(uv_stream_t *aServer, int aStatus) // incoming connection
     {
         requireIOThread();
-        std::cout << "Incoming connection\n";
 
         if(aStatus < 0)
         {
