@@ -36,7 +36,7 @@ namespace uvcomms4
 
     private:
         function_t  mFunction;
-        bool        mActive { false };
+        bool        mActive { true };
     };
 
     template<typename fun_t>
