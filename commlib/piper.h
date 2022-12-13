@@ -58,15 +58,26 @@ public:
     void connect(std::string const & aConnectAddress, callback_t && aCallback);
 
     /** Writes the supplied data to the pipe indentified by aPipeDescriptor.
-     *
-     *
+     *  Returns (via future<>) the UV result code once the message has been
+     *  completetly written.
     */
     template<requests::MessageableContainer container_t>
     std::future<int> write(Descriptor aPipeDescriptor, container_t &&aContainer);
 
+    /** Writes the supplied data to the pipe indentified by aPipeDescriptor.
+     *  'Returns' (via the callback) the UV result code once the message has been
+     *  completetly written.
+     *  This callback will be called on the IO thread
+    */
     template<requests::MessageableContainer container_t,
         std::invocable<int> callback_t>
     void write(Descriptor aPipeDescriptor, container_t &&aContainer, callback_t &&aCallback);
+
+
+    std::future<int> close(Descriptor aPipeDescriptor);
+
+    template<std::invocable<int> callback_t>
+    void close(Descriptor aPipeDescriptor, callback_t &&aCallback);
 
 private:
     void threadFunction(std::promise<void> aInitPromise);
@@ -94,6 +105,7 @@ private:
     void handleListenRequest(requests::ListenRequest *) override;
     void handleConnectRequest(requests::ConnectRequest *) override;
     void handleWriteRequest(requests::WriteRequest *) override;
+    void handleCloseRequest(requests::CloseRequest *) override;
 
     void pipeRegister(UVPipe * aPipe);
     void pipeUnregister(Descriptor aDescriptor);
@@ -197,5 +209,29 @@ inline void Piper::write(Descriptor aPipeDescriptor, container_t &&aContainer, c
     );
 }
 
+inline std::future<int> Piper::close(Descriptor aPipeDescriptor)
+{
+    requireNonIOThread();
+    std::promise<int> thePromise;
+    auto ret_future = thePromise.get_future();
+
+    postRequest(
+        requests::makeCloseRequest(
+            aPipeDescriptor,
+            requests::promisingCallback(std::move(thePromise))
+        )
+    );
+    return ret_future;
+}
+
+
+template <std::invocable<int> callback_t>
+inline void Piper::close(Descriptor aPipeDescriptor, callback_t &&aCallback)
+{
+    postRequest(
+        requests::makeCloseRequest(aPipeDescriptor,
+            std::forward<callback_t>(aCallback))
+    );
+}
 
 }

@@ -59,7 +59,7 @@ namespace uvcomms4
             theLoop.reset();
 
             aInitPromise.set_exception(std::current_exception());
-            
+
             return;
         }
 
@@ -225,6 +225,7 @@ namespace uvcomms4
         }
         else
         {
+            pipeRegister(listeningPipe);
             // NOTE this triggers ThreadSanitizer:
             // either there exists a data race in libstdc++ std::promise/future,
             // or this is a false positive
@@ -399,7 +400,7 @@ namespace uvcomms4
         auto found_pipe = mPipes.find(aReq->pipeDescriptor);
         if(found_pipe == mPipes.end())
         { // the pipe is gone or has never existed
-            theReq->fulfill(ENOTCONN);
+            theReq->fulfill(UV_ENOTCONN);
             return;
         }
 
@@ -419,6 +420,7 @@ namespace uvcomms4
             theReq->fulfill(r);
     }
 
+
     void Piper::onWrite(uv_write_t *aReq, int aStatus)
     {
         requireIOThread();
@@ -429,4 +431,25 @@ namespace uvcomms4
         theReq->fulfill(aStatus);
     }
 
+//================================================================================================================
+// CLOSING
+//================================================================================================================
+
+    void Piper::handleCloseRequest(requests::CloseRequest *aReq)
+    {
+        requireIOThread();
+        std::unique_ptr<requests::CloseRequest> theReq(aReq);
+
+        auto found_pipe = mPipes.find(aReq->descriptor);
+        if(found_pipe == mPipes.end())
+        { // the pipe is gone or has never existed
+            theReq->fulfill(UV_ENOTCONN);
+            return;
+        }
+
+        UVPipe *thePipe = found_pipe->second;
+
+        theReq->fulfill(0);
+        thePipe->close();
+    }
 }

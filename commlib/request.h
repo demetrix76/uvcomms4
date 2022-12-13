@@ -11,11 +11,12 @@
 
 namespace uvcomms4::requests
 {
-    static_assert(std::is_signed_v<Descriptor>, "Descriptor type must be signed");
+    static_assert(std::is_signed_v<Descriptor>, "Descriptor type must be signed"); // no longer important though
 
     struct ListenRequest;
     struct ConnectRequest;
     struct WriteRequest;
+    struct CloseRequest;
 
     struct RequestHandler
     {
@@ -23,6 +24,7 @@ namespace uvcomms4::requests
         virtual void handleListenRequest(ListenRequest *) = 0;
         virtual void handleConnectRequest(ConnectRequest *) = 0;
         virtual void handleWriteRequest(WriteRequest *) = 0;
+        virtual void handleCloseRequest(CloseRequest *) = 0;
     };
 
 
@@ -269,6 +271,58 @@ namespace uvcomms4::requests
             (aPipeDescriptor, std::forward<container_t>(aContainer), std::forward<callback_t>(aCallback));
     }
 
+
+//====================================================================================================
+// CloseRequest
+//====================================================================================================
+
+    struct CloseRequest: Request
+    {
+        using retval_t = int;
+
+        Descriptor  descriptor {};
+
+        void dispatchToHandler(RequestHandler *aHandler) override
+        {
+            aHandler->handleCloseRequest(this);
+        }
+
+        virtual void fulfill(retval_t) = 0;
+
+        void abort() override
+        {
+            fulfill( UV_ECANCELED );
+        }
+    protected:
+        CloseRequest(Descriptor aDescriptor):
+            descriptor(aDescriptor)
+        {}
+    };
+
+    template<typename callback_t>
+    struct CloseRequestImpl: CloseRequest
+    {
+        template<std::invocable<CloseRequest::retval_t> fun_t>
+        CloseRequestImpl(Descriptor aDescriptor, fun_t &&aCallback):
+            CloseRequest(aDescriptor),
+            mCallback(std::forward<fun_t>(aCallback))
+        {}
+
+        void fulfill(retval_t aRetval) override
+        {
+            mCallback(aRetval);
+        }
+
+        callback_t mCallback;
+    };
+
+    template<std::invocable<CloseRequest::retval_t> callback_t>
+    inline std::unique_ptr<CloseRequest>
+    makeCloseRequest(Descriptor aDescriptor, callback_t &&aCallback)
+    {
+        return std::make_unique<CloseRequestImpl<std::decay_t<callback_t>>>
+            (aDescriptor, std::forward<callback_t>(aCallback));
+    }
 
 
 }
