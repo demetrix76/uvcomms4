@@ -108,8 +108,9 @@ struct expectation
 class EchoClientDelegate: public PiperDelegate
 {
 public:
-    EchoClientDelegate(std::latch &aCompletionLatch):
-        mCompletionLatch(aCompletionLatch)
+    EchoClientDelegate(std::size_t aConnectionCount, std::latch &aCompletionLatch):
+        mCompletionLatch(aCompletionLatch),
+        mConnectionCount(aConnectionCount)
     {}
 
     void Startup(Piper * aPiper) override
@@ -134,7 +135,7 @@ public:
         if(aErrCode != 0)
             ++closed_with_error_count;
 
-        if(cc == successful_connections_count)
+        if(cc == mConnectionCount)
             signalDone();
     }
 
@@ -214,6 +215,7 @@ public:
         for(std::size_t i = 0; i < aConnectionsCount; i++)
             mClient->connect(aPipeName, [&sync, aMessagesCount, this](auto c){
                 auto [connectedPipe, errCode] = c;
+                ++total_connections_count;
                 if(0 == errCode)
                 {
                     ++successful_connections_count;
@@ -233,12 +235,13 @@ public:
         {
             //  there will be no onPipeClosed so we should end up early; tell the caller we're done here
             std::cerr << "No single connection attempt succeeded\n";
-            signalDone();
+            //signalDone(); // all handles still get closed, so this signal confuses the system, making latch count negative
         }
     }
 
     void signalDone()
     {
+        done_signaled = true;
         mCompletionLatch.count_down();
     }
 
@@ -256,12 +259,14 @@ public:
         EXPECT_EQ(write_errors_count, 0);
     }
 
+    bool    done_signaled { false };
     bool    startup_called { false };
     bool    shutdown_called { false };
 
 
     std::atomic<std::size_t> new_connections_count { 0 }; // must remain at 0
     std::atomic<std::size_t> successful_connections_count { 0 }; // these are outgoing connections
+    std::atomic<std::size_t> total_connections_count { 0 }; // these are outgoing connections
     std::atomic<std::size_t> close_count { 0 };
     std::atomic<std::size_t> closed_with_error_count { 0 };
     std::atomic<std::size_t> messages_received_count { 0 };
@@ -274,6 +279,7 @@ private:
     Piper *mClient { nullptr };
 
     std::latch  &mCompletionLatch;
+    std::size_t  mConnectionCount { 0 };
 
     std::mutex              mMx;
     std::map<Descriptor, expectation> mExpectations;

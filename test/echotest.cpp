@@ -14,7 +14,7 @@ using namespace uvcomms4;
 // meant to be run on a separate thread, returning a list of delegates for assession
 
 std::list<std::shared_ptr<echotest::EchoClientDelegate>>
-clientWorker(std::string aPipeName, std::size_t aClientCount,
+clientWorker(std::size_t aWorkerId, std::string aPipeName, std::size_t aClientCount,
     std::size_t aConnectionsPerClient, std::size_t aMessagesPerConnection)
 {
     std::list<std::shared_ptr<echotest::EchoClientDelegate>> delegates;
@@ -22,7 +22,7 @@ clientWorker(std::string aPipeName, std::size_t aClientCount,
     std::latch completionLatch(aClientCount);
 
     for(std::size_t i = 0; i < aClientCount; i++)
-        delegates.emplace_back(std::make_shared<echotest::EchoClientDelegate>(completionLatch));
+        delegates.emplace_back(std::make_shared<echotest::EchoClientDelegate>(aConnectionsPerClient, completionLatch));
 
     {
         std::list<Piper> pipers;
@@ -33,10 +33,15 @@ clientWorker(std::string aPipeName, std::size_t aClientCount,
             delegate->spinUp(aPipeName, aConnectionsPerClient, aMessagesPerConnection);
 
         completionLatch.wait();
+        std::cout << "Worker " << aWorkerId << " done waiting\n";
     }
 
     return delegates;
 }
+
+//N.B. Attaching to a process in linux requires disabling ptrace protection:
+//"This is due to kernel hardening in Linux; you can disable this behavior by echo 0 > /proc/sys/kernel/yama/ptrace_scope or by modifying it in /etc/sysctl.d/10-ptrace.conf"
+//https://stackoverflow.com/questions/19215177/how-to-solve-ptrace-operation-not-permitted-when-trying-to-attach-gdb-to-a-pro
 
 TEST(EchoTest, EchoTest1)
 {
@@ -62,7 +67,7 @@ TEST(EchoTest, EchoTest1)
         for(std::size_t i = 0; i < workers_count; i++)
         {
             wks.emplace_back(std::async(std::launch::async, [=]{
-                return clientWorker(pipename, clients_per_worker,
+                return clientWorker(i, pipename, clients_per_worker,
                     connections_per_client, messages_per_connection);
             }));
         }
