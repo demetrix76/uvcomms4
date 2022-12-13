@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/resource.h>
+#include <signal.h>
 #include <cassert>
 
 namespace uvcomms4
@@ -76,6 +78,15 @@ namespace uvcomms4
     void configure_signals()
     {
         signal(SIGPIPE, SIG_IGN);
+    }
+
+    void adjust_resource_limits()
+    {
+        rlimit rlp {};
+        if(getrlimit(RLIMIT_NOFILE, &rlp) < 0)
+            return;
+        rlp.rlim_cur = 2048;
+        setrlimit(RLIMIT_NOFILE, &rlp);
     }
 
 }
