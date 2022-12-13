@@ -397,14 +397,18 @@ namespace uvcomms4
         requireIOThread();
         std::unique_ptr<requests::WriteRequest> theReq(aReq);
 
-        auto found_pipe = mPipes.find(aReq->pipeDescriptor);
-        if(found_pipe == mPipes.end())
-        { // the pipe is gone or has never existed
+        UVPipe *thePipe = pipeGet(theReq->pipeDescriptor);
+        if(!thePipe)
+        {// the pipe is gone or has never existed
             theReq->fulfill(UV_ENOTCONN);
             return;
         }
 
-        UVPipe *thePipe = found_pipe->second;
+        if(thePipe->isListener())
+        {
+            theReq->fulfill(UV_ENOTSUP);
+            return;
+        }
 
         uv_buf_t buffers[] {
             uv_buf_init(theReq->header, sizeof(theReq->header)),
@@ -440,16 +444,16 @@ namespace uvcomms4
         requireIOThread();
         std::unique_ptr<requests::CloseRequest> theReq(aReq);
 
-        auto found_pipe = mPipes.find(aReq->descriptor);
-        if(found_pipe == mPipes.end())
-        { // the pipe is gone or has never existed
+        UVPipe *thePipe = pipeGet(theReq->descriptor);
+        if(!thePipe)
+        {
             theReq->fulfill(UV_ENOTCONN);
-            return;
+        }
+        else
+        {
+            theReq->fulfill(0); // consider fulfilling when _actually_ closed?
+            thePipe->close();
         }
 
-        UVPipe *thePipe = found_pipe->second;
-
-        theReq->fulfill(0);
-        thePipe->close();
     }
 }

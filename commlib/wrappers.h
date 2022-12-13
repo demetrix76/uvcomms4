@@ -186,6 +186,11 @@ namespace uvcomms4::detail
             return static_cast<UVPipeT*>(static_cast<BaseHandle*>(aHandle->data));
         }
 
+        bool isListener() const noexcept
+        {
+            return mIsListener;
+        }
+
         int bind(char const *aName) noexcept
         {
             return uv_pipe_bind(*this, aName);
