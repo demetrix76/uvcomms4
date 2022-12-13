@@ -203,7 +203,7 @@ namespace uvcomms4::detail
         int listen() noexcept
         {
             mIsListener = true;
-            return uv_listen(*this, 128, &cb<owner_t>::connection);
+            return uv_listen(*this, 1024, &cb<owner_t>::connection);
         }
 
         int read_start() noexcept
