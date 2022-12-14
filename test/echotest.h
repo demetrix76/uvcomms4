@@ -85,8 +85,10 @@ public:
                 mServer->write(aDescriptor, std::move(message), [this](int r){
                     if(r == 0)
                         ++messages_sent_count;
-                    else
+                    else {
+                        std::cerr << "SVR: WRITE ERROR: " << r << std::endl;
                         ++write_errors_count;
+                    }
                 });
             }
         }
@@ -158,8 +160,8 @@ public:
         if(aErrCode != 0)
             ++closed_with_error_count;
 
-        if(cc == mConnectionCount)
-            signalDone();
+        if(cc == pipes_created_count)
+            signalDone(); // this is not quite right - we may have extra close_count on repeated attempts to connect
     }
 
     void onMessage(Descriptor aDescriptor, Collector & aCollector) noexcept override
@@ -236,30 +238,64 @@ public:
         std::latch sync(aConnectionsCount);
 
         for(std::size_t i = 0; i < aConnectionsCount; i++)
-            mClient->connect(aPipeName, [&sync, aMessagesCount, this](auto c){
-                auto [connectedPipe, errCode] = c;
-                ++total_connections_count;
-                if(0 == errCode)
-                {
-                    ++successful_connections_count;
-                    addExpectation(connectedPipe, aMessagesCount);
-                    // start the first write; subsequent writes will be initiated by the completion handler
-                    sendRandomMessage(connectedPipe, aMessagesCount);
-                }
-                else // failed to connect
-                {
-                    // do nothing
-                }
-                sync.count_down();
-            });
+        {
+            Descriptor connectedPipe = 0;
+            int errCode = 0;
 
-        sync.wait(); // wait until all connection attepts are done
+            for(int i = 0; i < 100; i++)
+            {
+                auto [newPipe, err] = mClient->connect(aPipeName).get();
+                ++pipes_created_count;
+                connectedPipe = newPipe;
+                errCode = err;
+                if(err == UV_ECONNREFUSED)
+                {
+                    std::cerr << "UV_ECONNREFUSED\n";
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    continue;
+                }
+                break;
+            }
+
+            if(0 == errCode)
+            {
+                ++successful_connections_count;
+                addExpectation(connectedPipe, aMessagesCount);
+                // start the first write; subsequent writes will be initiated by the completion handler
+                sendRandomMessage(connectedPipe, aMessagesCount);
+            }
+            else
+            {
+                ++total_connections_count;
+                std::cerr << "FAILED TO CONNECT: " << errCode << std::endl;
+            }
+        }
+
         if(0 == successful_connections_count)
         {
             //  there will be no onPipeClosed so we should end up early; tell the caller we're done here
             std::cerr << "No single connection attempt succeeded\n";
             //signalDone(); // all handles still get closed, so this signal confuses the system, making latch count negative
         }
+            // mClient->connect(aPipeName, [&sync, aMessagesCount, this](auto c){
+            //     auto [connectedPipe, errCode] = c;
+            //     ++total_connections_count;
+            //     if(0 == errCode)
+            //     {
+            //         ++successful_connections_count;
+            //         addExpectation(connectedPipe, aMessagesCount);
+            //         // start the first write; subsequent writes will be initiated by the completion handler
+            //         sendRandomMessage(connectedPipe, aMessagesCount);
+            //     }
+            //     else // failed to connect
+            //     {
+            //         std::cerr << "FAILED TO CONNECT: " << errCode << std::endl;
+            //         // do nothing
+            //     }
+            //     sync.count_down();
+            // });
+
+        // sync.wait(); // wait until all connection attepts are done
     }
 
     void signalDone()
@@ -296,6 +332,8 @@ public:
     std::atomic<std::size_t> bad_messages_count { 0 };
     std::atomic<std::size_t> messages_sent_count { 0 };
     std::atomic<std::size_t> write_errors_count { 0 };
+
+    std::atomic<std::size_t> pipes_created_count { 0 };
 
 
 private:
