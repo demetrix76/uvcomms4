@@ -10,11 +10,34 @@
 #include <limits>
 #include <latch>
 #include <iostream>
+#include <random>
 
 namespace echotest
 {
 
 using namespace uvcomms4;
+
+/** Random strings source */
+class RSource
+{
+public:
+    std::string operator () ()
+    {
+        std::size_t len = mLengthGen(mRS);
+        std::string result;
+        result.reserve(len);
+        for (std::size_t i = 0; i < len; i++)
+            result.push_back((char)mCharGen(mRS));
+        return result;
+    }
+
+private:
+    std::mt19937    mRS{ std::random_device{}() };
+    std::uniform_int_distribution<std::mt19937::result_type>
+        mLengthGen{ 1, 128 * 1024 };
+    std::uniform_int_distribution<std::mt19937::result_type>
+        mCharGen{ 32, 127 };
+};
 
 //====================================================================================================
 // SERVER DELEGATE
@@ -190,7 +213,7 @@ public:
     {
         if(aRemaining > 0)
         {
-            std::string message = "Some random message"; // TODO make it truly random
+            std::string message = mRSource();// "Some random message";
             addExpectedMessage(aDescriptor, message);
             mClient->write(aDescriptor, std::move(message), [=, this](int aErrCode){
                 if(0 == aErrCode)
@@ -283,6 +306,8 @@ private:
 
     std::mutex              mMx;
     std::map<Descriptor, expectation> mExpectations;
+
+    RSource mRSource;
 
 };
 
