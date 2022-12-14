@@ -43,7 +43,7 @@ private:
 // SERVER DELEGATE
 //====================================================================================================
 
-
+ 
 class EchoServerDelegate: public PiperDelegate
 {
 public:
@@ -123,230 +123,40 @@ private:
 // CLIENT DELEGATE
 //====================================================================================================
 
-//using queue_t = std::deque<std::string>;
-struct expectation
-{
-    std::deque<std::string> messages;
-    int counter;
-};
-
-class EchoClientDelegate: public PiperDelegate
-{
-public:
-    EchoClientDelegate(std::size_t aConnectionCount, std::latch &aCompletionLatch):
-        mCompletionLatch(aCompletionLatch),
-        mConnectionCount(aConnectionCount)
-    {}
-
-    void Startup(Piper * aPiper) override
+class EchoClientDelegate: PiperDelegate
     {
-        mClient = aPiper;
-        startup_called = true;
-    }
-
-    void Shutdown() noexcept override
-    {
-        shutdown_called = true;
-    }
-
-    void onNewConnection(Descriptor aListener, Descriptor aPipe) noexcept override
-    {
-        ++new_connections_count;
-    }
-
-    void onPipeClosed(Descriptor aPipe, int aErrCode) noexcept override
-    {
-        auto cc = ++close_count;
-        if(aErrCode != 0)
-            ++closed_with_error_count;
-
-        if(cc == pipes_created_count)
-            signalDone(); // this is not quite right - we may have extra close_count on repeated attempts to connect
-    }
-
-    void onMessage(Descriptor aDescriptor, Collector & aCollector) noexcept override
-    {
-        auto [status, message] = aCollector.getMessage<std::string>();
-        if(status == CollectorStatus::HasMessage)
+    public:
+        EchoClientDelegate()
         {
-            ++messages_received_count;
-            if(!checkExpectedMessage(aDescriptor, message))
-            {
-                ++bad_messages_count;
-                mClient->close(aDescriptor, [](auto){});
-            }
-        }
-    }
 
-    // ===============
-    void addExpectedMessage(Descriptor aDescriptor, std::string const &aMessage)
-    {
-        std::lock_guard lk(mMx);
-        auto &expectation = mExpectations.at(aDescriptor);
-        expectation.messages.push_back(aMessage);
-
-    }
-
-    bool checkExpectedMessage(Descriptor aDescriptor, std::string const &aMessage)
-    {
-        std::string expected_mesage;
-        bool done = false;
-        {
-            std::lock_guard lk(mMx);
-            auto &expectation = mExpectations.at(aDescriptor);
-            expected_mesage = std::move(expectation.messages.front());
-            expectation.messages.pop_front();
-            done = (0 == --expectation.counter);
         }
 
-        if(done)
-            mClient->close(aDescriptor, [](auto){});
-
-        return expected_mesage == aMessage;
-    }
-
-    void addExpectation(Descriptor aDescriptor, int aCount)
-    {
-        std::lock_guard lk(mMx);
-        mExpectations.insert({aDescriptor, {{}, aCount}});
-    }
-
-    void sendRandomMessage(Descriptor aDescriptor, int aRemaining)
-    {
-        if(aRemaining > 0)
+        void Startup(Piper * aPiper) override
         {
-            std::string message = mRSource();// "Some random message";
-            addExpectedMessage(aDescriptor, message);
-            mClient->write(aDescriptor, std::move(message), [=, this](int aErrCode){
-                if(0 == aErrCode)
-                {
-                    ++messages_sent_count;
-                    sendRandomMessage(aDescriptor, aRemaining - 1);
-                }
-                else
-                {
-                    ++write_errors_count;
-                    std::cerr << "WRITE ERROR: " << aErrCode << std::endl;
-                    mClient->close(aDescriptor, [](auto){});
-                }
-            });
-        } // N.B. too early to close; there will be a return message
-    }
 
-    void spinUp(std::string const & aPipeName, std::size_t aConnectionsCount, std::size_t aMessagesCount)
-    {
-        std::latch sync(aConnectionsCount);
-
-        for(std::size_t i = 0; i < aConnectionsCount; i++)
-        {
-            Descriptor connectedPipe = 0;
-            int errCode = 0;
-
-            for(int i = 0; i < 100; i++)
-            {
-                auto [newPipe, err] = mClient->connect(aPipeName).get();
-                ++pipes_created_count;
-                connectedPipe = newPipe;
-                errCode = err;
-                if(err == UV_ECONNREFUSED)
-                {
-                    std::cerr << "UV_ECONNREFUSED\n";
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                    continue;
-                }
-                break;
-            }
-
-            if(0 == errCode)
-            {
-                ++successful_connections_count;
-                addExpectation(connectedPipe, aMessagesCount);
-                // start the first write; subsequent writes will be initiated by the completion handler
-                sendRandomMessage(connectedPipe, aMessagesCount);
-            }
-            else
-            {
-                ++total_connections_count;
-                std::cerr << "FAILED TO CONNECT: " << errCode << std::endl;
-            }
         }
 
-        if(0 == successful_connections_count)
+        void Shutdown() noexcept override
         {
-            //  there will be no onPipeClosed so we should end up early; tell the caller we're done here
-            std::cerr << "No single connection attempt succeeded\n";
-            //signalDone(); // all handles still get closed, so this signal confuses the system, making latch count negative
+
         }
-            // mClient->connect(aPipeName, [&sync, aMessagesCount, this](auto c){
-            //     auto [connectedPipe, errCode] = c;
-            //     ++total_connections_count;
-            //     if(0 == errCode)
-            //     {
-            //         ++successful_connections_count;
-            //         addExpectation(connectedPipe, aMessagesCount);
-            //         // start the first write; subsequent writes will be initiated by the completion handler
-            //         sendRandomMessage(connectedPipe, aMessagesCount);
-            //     }
-            //     else // failed to connect
-            //     {
-            //         std::cerr << "FAILED TO CONNECT: " << errCode << std::endl;
-            //         // do nothing
-            //     }
-            //     sync.count_down();
-            // });
 
-        // sync.wait(); // wait until all connection attepts are done
-    }
+        void onNewConnection(Descriptor aListener, Descriptor aPipe) noexcept override
+        {
 
-    void signalDone()
-    {
-        done_signaled = true;
-        mCompletionLatch.count_down();
-    }
+        }
 
-    void assess(std::size_t aConnectionsCount, std::size_t aMessagesCount)
-    {
-        EXPECT_TRUE(startup_called);
-        EXPECT_TRUE(shutdown_called);
-        EXPECT_EQ(close_count, aConnectionsCount);
-        EXPECT_EQ(new_connections_count, 0);
-        EXPECT_EQ(successful_connections_count, aConnectionsCount);
-        EXPECT_EQ(closed_with_error_count, 0);
-        EXPECT_EQ(messages_received_count, aConnectionsCount * aMessagesCount);
-        EXPECT_EQ(bad_messages_count, 0);
-        EXPECT_EQ(messages_sent_count, aConnectionsCount * aMessagesCount);
-        EXPECT_EQ(write_errors_count, 0);
-    }
+        void onPipeClosed(Descriptor aPipe, int aErrCode) noexcept override
+        {
 
-    bool    done_signaled { false };
-    bool    startup_called { false };
-    bool    shutdown_called { false };
+        }
 
+        void onMessage(Descriptor aDescriptor, Collector & aCollector) noexcept override
+        {
 
-    std::atomic<std::size_t> new_connections_count { 0 }; // must remain at 0
-    std::atomic<std::size_t> successful_connections_count { 0 }; // these are outgoing connections
-    std::atomic<std::size_t> total_connections_count { 0 }; // these are outgoing connections
-    std::atomic<std::size_t> close_count { 0 };
-    std::atomic<std::size_t> closed_with_error_count { 0 };
-    std::atomic<std::size_t> messages_received_count { 0 };
-    std::atomic<std::size_t> bad_messages_count { 0 };
-    std::atomic<std::size_t> messages_sent_count { 0 };
-    std::atomic<std::size_t> write_errors_count { 0 };
+        }
 
-    std::atomic<std::size_t> pipes_created_count { 0 };
-
-
-private:
-    Piper *mClient { nullptr };
-
-    std::latch  &mCompletionLatch;
-    std::size_t  mConnectionCount { 0 };
-
-    std::mutex              mMx;
-    std::map<Descriptor, expectation> mExpectations;
-
-    RSource mRSource;
-
-};
+        // ===================================
+    };
 
 }
