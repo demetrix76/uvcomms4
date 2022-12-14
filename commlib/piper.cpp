@@ -314,6 +314,8 @@ namespace uvcomms4
 
             if(aNread > 0)
                 collector.append(ReadBuffer{aBuf->base, (std::size_t)aNread});
+            else
+                ReadBuffer::memfree(aBuf->base);
 
             while(collector.status() == CollectorStatus::HasMessage)
                mDelegate->onMessage(thePipe->descriptor(), collector);
