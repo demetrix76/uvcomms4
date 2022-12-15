@@ -244,9 +244,9 @@ namespace uvcomms4
 
         if(aStatus < 0)
         {
-            std::cerr << "WARNING: error in incoming connection: "
-                << std::error_code(-aStatus, std::system_category()).message()
-                << std::endl;
+            // std::cerr << "WARNING: error in incoming connection: "
+            //     << std::error_code(-aStatus, std::system_category()).message()
+            //     << std::endl;
             return;
         }
 
